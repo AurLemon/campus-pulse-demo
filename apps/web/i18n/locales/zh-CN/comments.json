@@ -1,0 +1,18 @@
+{
+	"comments": {
+		"count": "{count} 条讨论",
+		"reply": "回复",
+		"empty": "还没有讨论，留下第一句。",
+		"write": "加入讨论",
+		"placeholder": "具体说说你的想法",
+		"replying": "正在回复 {name}",
+		"submit": "发表讨论",
+		"author": "作者",
+		"total": "共 {count} 条评论",
+		"expandReplies": "展开 {count} 条回复",
+		"collapseReplies": "收起回复",
+		"refreshPending": "评论已发表，暂时无法更新列表，请刷新查看。",
+		"joinPlaceholder": "说点什么",
+		"replyPlaceholder": "回复 {name}"
+	}
+}

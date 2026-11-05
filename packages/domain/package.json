@@ -1,0 +1,14 @@
+{
+	"name": "@campus/domain",
+	"private": true,
+	"type": "module",
+	"exports": {
+		"./prisma": "./prisma.ts",
+		"./*": "./*.ts",
+		"./services/*": "./services/*.ts"
+	},
+	"dependencies": {
+		"@campus/contracts": "workspace:*",
+		"@campus/recommendation": "workspace:*"
+	}
+}

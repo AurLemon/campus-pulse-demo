@@ -1,0 +1,29 @@
+{
+	"posts": {
+		"relatedActivity": "关联活动",
+		"like": "点赞",
+		"liked": "已点赞",
+		"favorite": "收藏",
+		"favorited": "已收藏",
+		"writeEyebrow": "A NOTE OF YOUR OWN",
+		"publish": "发布帖子",
+		"title": "标题",
+		"titlePlaceholder": "想分享的事，从这里开始",
+		"kind": "内容形式",
+		"text": "短帖",
+		"article": "长文",
+		"body": "正文",
+		"bodyPlaceholder": "讲清楚具体发生了什么，或者你想问什么。",
+		"tags": "主题标签",
+		"tagsPlaceholder": "使用逗号分隔，例如：摄影, 阅读",
+		"noActivity": "不关联活动",
+		"draftHint": "写点最近想说的。草稿会在本次会话中为当前身份保留。",
+		"gallery": {
+			"label": "{title}（图片浏览）",
+			"keyboard": "使用左右方向键切换图片，Home 和 End 跳到首张和末张。",
+			"previous": "上一张图片",
+			"next": "下一张图片",
+			"position": "第 {current} 张，共 {total} 张"
+		}
+	}
+}

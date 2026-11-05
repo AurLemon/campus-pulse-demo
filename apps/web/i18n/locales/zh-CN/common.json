@@ -1,0 +1,15 @@
+{
+	"common": {
+		"backHome": "返回首页",
+		"theme": "外观模式",
+		"light": "浅色",
+		"dark": "深色",
+		"system": "跟随系统",
+		"identityHint": "切换身份体验不同兴趣推荐",
+		"skipContent": "跳到主要内容",
+		"openSettings": "身份与外观",
+		"closeSettings": "关闭设置",
+		"console": "管理控制台",
+		"currentIdentity": "当前身份"
+	}
+}

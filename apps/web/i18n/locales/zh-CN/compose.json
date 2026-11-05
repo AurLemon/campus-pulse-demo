@@ -1,0 +1,15 @@
+{
+	"compose": {
+		"template": "大字报模板",
+		"orbit": "环绕",
+		"quote": "引语",
+		"note": "便笺",
+		"aspect": "封面比例",
+		"portrait": "竖版 (3:4)",
+		"square": "方形 (1:1)",
+		"landscape": "横版 (4:3)",
+		"highlight": "高亮词 (可选)",
+		"highlightHint": "填写标题中已有的词语，引语模板留空时自动突出标题开头。上传图片时保留此设置供标题封面使用。",
+		"highlightInvalid": "请填写标题中已有的词语"
+	}
+}

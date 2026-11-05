@@ -1,0 +1,14 @@
+{
+	"feed": {
+		"eyebrow": "CAMPUS NOTES",
+		"title": "今天，在校园里",
+		"subtitle": "一场活动，一段经验，或一个还没想明白的问题。",
+		"search": "搜索当前内容流",
+		"recommended": "为你推荐",
+		"following": "正在关注",
+		"reading": "慢慢看，总有一条想接的话。",
+		"empty": "暂时没有找到内容",
+		"emptyHint": "换个关键词，或写下你的第一篇帖子。",
+		"followHint": "关注感兴趣的同学后，这里会按时间显示他们的帖子。"
+	}
+}

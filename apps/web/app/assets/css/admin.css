@@ -1,0 +1,571 @@
+/* TDesign default dark tokens, scoped to the management surface and its attached popups. */
+.dark .admin-shell {
+	--td-brand-color-1: #1b2f51;
+	--td-brand-color-2: #173463;
+	--td-brand-color-3: #143975;
+	--td-brand-color-4: #103d88;
+	--td-brand-color-5: #0d429a;
+	--td-brand-color-6: #054bbe;
+	--td-brand-color-7: #2667d4;
+	--td-brand-color-8: #4582e6;
+	--td-brand-color-9: #699ef5;
+	--td-brand-color-10: #96bbf8;
+	--td-warning-color-1: #4f2a1d;
+	--td-warning-color-2: #582f21;
+	--td-warning-color-3: #733c23;
+	--td-warning-color-4: #a75d2b;
+	--td-warning-color-5: #cf6e2d;
+	--td-warning-color-6: #dc7633;
+	--td-warning-color-7: #e8935c;
+	--td-warning-color-8: #ecbf91;
+	--td-warning-color-9: #eed7bf;
+	--td-warning-color-10: #f3e9dc;
+	--td-error-color-1: #472324;
+	--td-error-color-2: #5e2a2d;
+	--td-error-color-3: #703439;
+	--td-error-color-4: #83383e;
+	--td-error-color-5: #a03f46;
+	--td-error-color-6: #c64751;
+	--td-error-color-7: #de6670;
+	--td-error-color-8: #ec888e;
+	--td-error-color-9: #edb1b6;
+	--td-error-color-10: #eeced0;
+	--td-success-color-1: #193a2a;
+	--td-success-color-2: #1a4230;
+	--td-success-color-3: #17533d;
+	--td-success-color-4: #0d7a55;
+	--td-success-color-5: #059465;
+	--td-success-color-6: #43af8a;
+	--td-success-color-7: #46bf96;
+	--td-success-color-8: #80d2b6;
+	--td-success-color-9: #b4e1d3;
+	--td-success-color-10: #deede8;
+	--td-gray-color-1: #f3f3f3;
+	--td-gray-color-2: #eee;
+	--td-gray-color-3: #e8e8e8;
+	--td-gray-color-4: #ddd;
+	--td-gray-color-5: #c6c6c6;
+	--td-gray-color-6: #a6a6a6;
+	--td-gray-color-7: #8b8b8b;
+	--td-gray-color-8: #777;
+	--td-gray-color-9: #5e5e5e;
+	--td-gray-color-10: #4b4b4b;
+	--td-gray-color-11: #393939;
+	--td-gray-color-12: #2c2c2c;
+	--td-gray-color-13: #242424;
+	--td-gray-color-14: #181818;
+	--td-font-white-1: rgba(255, 255, 255, 0.9);
+	--td-font-white-2: rgba(255, 255, 255, 0.55);
+	--td-font-white-3: rgba(255, 255, 255, 0.35);
+	--td-font-white-4: rgba(255, 255, 255, 0.22);
+	--td-font-gray-1: rgba(0, 0, 0, 0.9);
+	--td-font-gray-2: rgba(0, 0, 0, 0.6);
+	--td-font-gray-3: rgba(0, 0, 0, 0.4);
+	--td-font-gray-4: rgba(0, 0, 0, 0.26);
+	--td-brand-color: var(--td-brand-color-8);
+	--td-warning-color: var(--td-warning-color-5);
+	--td-error-color: var(--td-error-color-6);
+	--td-success-color: var(--td-success-color-5);
+	--td-brand-color-hover: var(--td-brand-color-7);
+	--td-brand-color-focus: var(--td-brand-color-2);
+	--td-brand-color-active: var(--td-brand-color-9);
+	--td-brand-color-disabled: var(--td-brand-color-3);
+	--td-brand-color-light: var(--td-brand-color-1);
+	--td-brand-color-light-hover: var(--td-brand-color-2);
+	--td-warning-color-hover: var(--td-warning-color-4);
+	--td-warning-color-focus: var(--td-warning-color-2);
+	--td-warning-color-active: var(--td-warning-color-6);
+	--td-warning-color-disabled: var(--td-warning-color-3);
+	--td-warning-color-light: var(--td-warning-color-1);
+	--td-warning-color-light-hover: var(--td-warning-color-2);
+	--td-error-color-hover: var(--td-error-color-5);
+	--td-error-color-focus: var(--td-error-color-2);
+	--td-error-color-active: var(--td-error-color-7);
+	--td-error-color-disabled: var(--td-error-color-3);
+	--td-error-color-light: var(--td-error-color-1);
+	--td-error-color-light-hover: var(--td-error-color-2);
+	--td-success-color-hover: var(--td-success-color-4);
+	--td-success-color-focus: var(--td-success-color-2);
+	--td-success-color-active: var(--td-success-color-6);
+	--td-success-color-disabled: var(--td-success-color-3);
+	--td-success-color-light: var(--td-success-color-1);
+	--td-success-color-light-hover: var(--td-success-color-2);
+	--td-mask-active: rgba(0, 0, 0, 0.4);
+	--td-mask-disabled: rgba(0, 0, 0, 0.6);
+	--td-mask-background: rgba(36, 36, 36, 0.96);
+	--td-mask-gradient: rgba(36, 36, 36, 0);
+	--td-bg-color-page: var(--td-gray-color-14);
+	--td-bg-color-container: var(--td-gray-color-13);
+	--td-bg-color-container-hover: var(--td-gray-color-12);
+	--td-bg-color-container-active: var(--td-gray-color-10);
+	--td-bg-color-container-select: var(--td-gray-color-9);
+	--td-bg-color-secondarycontainer: var(--td-gray-color-12);
+	--td-bg-color-secondarycontainer-hover: var(--td-gray-color-11);
+	--td-bg-color-secondarycontainer-active: var(--td-gray-color-9);
+	--td-bg-color-component: var(--td-gray-color-11);
+	--td-bg-color-component-hover: var(--td-gray-color-10);
+	--td-bg-color-component-active: var(--td-gray-color-9);
+	--td-bg-color-secondarycomponent: var(--td-gray-color-10);
+	--td-bg-color-secondarycomponent-hover: var(--td-gray-color-9);
+	--td-bg-color-secondarycomponent-active: var(--td-gray-color-8);
+	--td-bg-color-component-disabled: var(--td-gray-color-12);
+	--td-bg-color-specialcomponent: transparent;
+	--td-text-color-primary: var(--td-font-white-1);
+	--td-text-color-secondary: var(--td-font-white-2);
+	--td-text-color-placeholder: var(--td-font-white-3);
+	--td-text-color-disabled: var(--td-font-white-4);
+	--td-text-color-anti: #fff;
+	--td-text-color-brand: var(--td-brand-color-8);
+	--td-text-color-link: var(--td-brand-color-8);
+	--td-text-color-watermark: rgba(255, 255, 255, 0.1);
+	--td-border-level-1-color: var(--td-gray-color-11);
+	--td-component-stroke: var(--td-gray-color-11);
+	--td-border-level-2-color: var(--td-gray-color-9);
+	--td-component-border: var(--td-gray-color-9);
+	--td-shadow-1:
+		0 4px 6px rgba(0, 0, 0, 0.06), 0 1px 10px rgba(0, 0, 0, 0.08),
+		0 2px 4px rgba(0, 0, 0, 0.12);
+	--td-shadow-2:
+		0 8px 10px rgba(0, 0, 0, 0.12), 0 3px 14px rgba(0, 0, 0, 0.1),
+		0 5px 5px rgba(0, 0, 0, 0.16);
+	--td-shadow-3:
+		0 16px 24px rgba(0, 0, 0, 0.14), 0 6px 30px rgba(0, 0, 0, 0.12),
+		0 8px 10px rgba(0, 0, 0, 0.2);
+	--td-shadow-inset-top: inset 0 0.5px 0 #5e5e5e;
+	--td-shadow-inset-right: inset 0.5px 0 0 #5e5e5e;
+	--td-shadow-inset-bottom: inset 0 -0.5px 0 #5e5e5e;
+	--td-shadow-inset-left: inset -0.5px 0 0 #5e5e5e;
+	--td-table-shadow-color: rgba(0, 0, 0, 0.55);
+	--td-scrollbar-color: rgba(255, 255, 255, 0.1);
+	--td-scrollbar-hover-color: rgba(255, 255, 255, 0.3);
+	--td-scroll-track-color: #333;
+}
+.admin-shell {
+	min-height: 100vh;
+	background: var(--td-bg-color-page);
+	color: var(--td-text-color-primary);
+	font-family:
+		-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei',
+		sans-serif;
+	font-size: 14px;
+	line-height: 1.6;
+	--td-radius-default: 4px;
+}
+.admin-shell p,
+.admin-shell h1,
+.admin-shell h2,
+.admin-shell h3 {
+	margin: 0;
+	letter-spacing: normal;
+}
+.admin-sidebar {
+	position: fixed;
+	inset: 0 auto 0 0;
+	width: 224px;
+	display: flex;
+	flex-direction: column;
+	border-right: 1px solid var(--td-border-level-1-color);
+	background: var(--td-bg-color-container);
+	z-index: 15;
+}
+.admin-logo {
+	height: 64px;
+	padding: 0 24px;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	color: var(--td-text-color-primary);
+	font-size: 20px;
+	font-weight: 650;
+}
+.admin-logo small {
+	display: block;
+	font-size: 10px;
+	line-height: 1.1;
+	color: var(--td-text-color-secondary);
+	font-weight: 400;
+	letter-spacing: 1px;
+}
+.admin-logo-mark {
+	display: grid;
+	place-items: center;
+	width: 30px;
+	height: 30px;
+	background: var(--td-brand-color);
+	color: #fff;
+	border-radius: 6px;
+	font-size: 19px;
+	font-weight: 700;
+}
+.admin-nav-caption {
+	padding: 22px 24px 10px;
+	color: var(--td-text-color-placeholder);
+	font-size: 12px;
+}
+.admin-sidebar .t-menu {
+	border-right: 0;
+}
+.admin-sidebar .t-menu__item {
+	height: 44px;
+	margin: 4px 12px;
+}
+.admin-sidebar-footer {
+	margin-top: auto;
+	padding: 24px;
+	font-size: 12px;
+	color: var(--td-text-color-secondary);
+}
+.admin-sidebar-footer p {
+	padding: 9px 0 15px;
+}
+.admin-sidebar-footer a {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--td-text-color-primary);
+}
+.admin-workspace {
+	margin-left: 224px;
+	min-width: 0;
+}
+.admin-topbar {
+	height: 64px;
+	padding: 0 28px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 20px;
+	background: var(--td-bg-color-container);
+	border-bottom: 1px solid var(--td-border-level-1-color);
+}
+.admin-topbar-actions {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+}
+.admin-identity {
+	width: 220px;
+}
+.admin-content {
+	padding: 28px;
+	min-height: calc(100vh - 112px);
+	max-width: 1640px;
+	margin: 0 auto;
+}
+.admin-footer {
+	text-align: center;
+	height: 48px;
+	font-size: 12px;
+	color: var(--td-text-color-placeholder);
+}
+.admin-page-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	margin-bottom: 24px;
+}
+.admin-page-heading h1 {
+	font-size: 24px;
+	line-height: 1.5;
+	font-weight: 600;
+}
+.admin-page-heading p {
+	margin-top: 6px;
+	color: var(--td-text-color-secondary);
+}
+.admin-feedback {
+	margin-bottom: 20px;
+}
+.admin-metrics {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 20px;
+	margin-bottom: 24px;
+}
+.admin-metric-title {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	color: var(--td-text-color-secondary);
+}
+.admin-metric-title .t-icon {
+	width: 24px;
+	height: 24px;
+	color: var(--td-brand-color);
+}
+.admin-metrics strong {
+	display: block;
+	font-size: 30px;
+	font-weight: 600;
+	line-height: 1.5;
+	font-variant-numeric: tabular-nums;
+	margin-top: 12px;
+}
+.admin-metric-note {
+	display: block;
+	margin-top: 6px;
+	font-size: 12px;
+	color: var(--td-text-color-placeholder);
+}
+.admin-overview-grid {
+	display: grid;
+	grid-template-columns: 1.1fr 1fr;
+	gap: 24px;
+}
+.admin-action-list a {
+	display: flex;
+	gap: 16px;
+	align-items: center;
+	padding: 20px 0;
+	border-bottom: 1px solid var(--td-border-level-1-color);
+}
+.admin-action-list a:first-child {
+	padding-top: 0;
+}
+.admin-action-list a:last-child {
+	padding-bottom: 0;
+	border-bottom: 0;
+}
+.admin-action-list a > .t-icon {
+	width: 36px;
+	height: 36px;
+	color: var(--td-brand-color);
+	background: var(--td-brand-color-light);
+	padding: 8px;
+	border-radius: 6px;
+}
+.admin-action-list strong {
+	font-size: 14px;
+	font-weight: 500;
+}
+.admin-action-list p {
+	margin-top: 4px;
+	font-size: 12px;
+	color: var(--td-text-color-secondary);
+}
+.admin-overview-grid .t-alert {
+	margin-top: 20px;
+}
+.admin-table-toolbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 20px;
+	margin-bottom: 20px;
+}
+.admin-filter-row {
+	display: flex;
+	gap: 12px;
+	width: min(560px, 70%);
+}
+.admin-filter-row > .t-input__wrap {
+	flex: 1;
+	min-width: 0;
+}
+.admin-filter-row > .t-select__wrap {
+	width: 140px;
+	flex: 0 0 140px;
+}
+.admin-table-caption {
+	font-size: 13px;
+	color: var(--td-text-color-secondary);
+	margin-bottom: 16px;
+}
+.admin-table-title {
+	font-weight: 500;
+	color: var(--td-text-color-primary);
+}
+.admin-table-title:hover {
+	color: var(--td-brand-color);
+}
+.admin-cell-subtitle {
+	font-size: 12px;
+	color: var(--td-text-color-secondary);
+	margin-top: 4px;
+}
+.admin-tabular {
+	font-variant-numeric: tabular-nums;
+}
+.admin-row-actions {
+	display: flex;
+	gap: 0;
+}
+.admin-row-actions .t-button {
+	padding-inline: 6px;
+}
+.admin-pagination {
+	margin-top: 20px;
+}
+.admin-danger-card {
+	margin-top: 24px;
+}
+.admin-maintenance-action {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 24px;
+	padding-top: 24px;
+}
+.admin-maintenance-action strong {
+	font-weight: 500;
+}
+.admin-maintenance-action p {
+	margin-top: 6px;
+	color: var(--td-text-color-secondary);
+	font-size: 12px;
+}
+.admin-form-hint {
+	color: var(--td-text-color-secondary);
+	font-size: 12px;
+	padding-bottom: 24px;
+}
+.admin-form-hint > span {
+	display: block;
+}
+.admin-form-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 20px;
+}
+.admin-shell .t-drawer .t-form__item {
+	margin-bottom: 24px;
+}
+.admin-shell .t-drawer .t-date-picker,
+.admin-shell .t-drawer .t-date-picker__content {
+	width: 100%;
+}
+.admin-editor-footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: 12px;
+	position: sticky;
+	bottom: -24px;
+	background: var(--td-bg-color-container);
+	border-top: 1px solid var(--td-border-level-1-color);
+	margin-inline: -24px;
+	padding: 16px 24px;
+}
+.admin-shell .t-dialog p {
+	margin-bottom: 16px;
+}
+.admin-shell .t-dialog .admin-feedback {
+	margin-top: 16px;
+}
+.admin-mobile-navigation {
+	display: none;
+}
+@media (max-width: 1100px) {
+	.admin-sidebar {
+		width: 200px;
+	}
+	.admin-workspace {
+		margin-left: 200px;
+	}
+	.admin-content {
+		padding: 20px;
+	}
+	.admin-topbar {
+		padding-inline: 20px;
+	}
+	.admin-metrics {
+		gap: 12px;
+	}
+	.admin-overview-grid {
+		grid-template-columns: 1fr;
+	}
+}
+@media (max-width: 760px) {
+	.admin-sidebar {
+		display: none;
+	}
+	.admin-workspace {
+		margin-left: 0;
+	}
+	.admin-topbar {
+		padding-inline: 16px;
+		gap: 8px;
+	}
+	.admin-topbar .t-breadcrumb__item:last-child {
+		display: none;
+	}
+	.admin-topbar-actions {
+		gap: 6px;
+	}
+	.admin-identity {
+		width: 160px;
+	}
+	.admin-mobile-navigation {
+		display: flex;
+		background: var(--td-bg-color-container);
+		padding: 0 16px;
+		gap: 24px;
+		border-bottom: 1px solid var(--td-border-level-1-color);
+	}
+	.admin-mobile-navigation a {
+		display: flex;
+		align-items: center;
+		padding: 12px 0;
+		font-size: 13px;
+		border-bottom: 2px solid transparent;
+	}
+	.admin-mobile-navigation a.active {
+		color: var(--td-brand-color);
+		border-color: var(--td-brand-color);
+	}
+	.admin-mobile-navigation .t-icon {
+		display: none;
+	}
+	.admin-content {
+		padding: 20px 16px;
+	}
+	.admin-page-heading h1 {
+		font-size: 22px;
+	}
+	.admin-metrics {
+		grid-template-columns: 1fr 1fr;
+	}
+	.admin-metrics .t-card__body {
+		padding: 16px;
+	}
+	.admin-metrics strong {
+		font-size: 26px;
+	}
+	.admin-table-toolbar {
+		align-items: stretch;
+		flex-direction: column;
+		gap: 12px;
+	}
+	.admin-filter-row {
+		width: 100%;
+	}
+	.admin-filter-row > .t-select__wrap {
+		width: 118px;
+		flex-basis: 118px;
+	}
+	.admin-table-toolbar > .t-button {
+		align-self: flex-start;
+	}
+	.admin-maintenance-action {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 16px;
+	}
+	.admin-form-grid {
+		grid-template-columns: 1fr;
+		gap: 0;
+	}
+	.admin-pagination .t-pagination__total {
+		display: none;
+	}
+}
+
+.admin-shell .t-button--theme-primary.t-button--variant-base {
+	background: var(--surface-raised);
+	color: var(--ink);
+	border-color: var(--line);
+}
+.admin-shell .t-button--theme-primary.t-button--variant-base:hover {
+	background: color-mix(in srgb, var(--ink) 8%, var(--surface-raised));
+	border-color: color-mix(in srgb, var(--ink) 28%, var(--line));
+}

@@ -1,0 +1,22 @@
+{
+	"profileComments": {
+		"editProfile": "编辑资料",
+		"name": "昵称",
+		"bio": "简介",
+		"campus": "校区",
+		"discard": "放弃未保存的修改？",
+		"keepEditing": "继续编辑",
+		"discardAction": "放弃修改",
+		"interestTitle": "调整兴趣",
+		"editComment": "编辑",
+		"deleteComment": "删除",
+		"commentActions": "评论操作",
+		"deleteTitle": "删除这条评论？",
+		"deleteHint": "删除后无法恢复。已有回复会继续保留。",
+		"deleted": "该评论已删除",
+		"save": "保存",
+		"cancel": "取消",
+		"delete": "删除",
+		"savedRefreshPending": "操作已完成，暂时无法更新页面，请刷新查看。"
+	}
+}

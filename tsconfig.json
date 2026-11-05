@@ -1,0 +1,17 @@
+{
+	"files": [],
+	"references": [
+		{
+			"path": "./apps/web/.nuxt/tsconfig.app.json"
+		},
+		{
+			"path": "./apps/web/.nuxt/tsconfig.server.json"
+		},
+		{
+			"path": "./apps/studio/.nuxt/tsconfig.app.json"
+		},
+		{
+			"path": "./apps/studio/.nuxt/tsconfig.server.json"
+		}
+	]
+}

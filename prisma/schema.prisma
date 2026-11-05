@@ -1,0 +1,226 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../generated/prisma"
+  importFileExtension = "ts"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id                     String        @id
+  name                   String
+  account                String?       @unique
+  passwordHash           String?
+  bio                    String
+  campus                 String
+  role                   String
+  interests              String
+  createdAt              String
+  source                 String
+  Activity_organizerId   Activity[]    @relation("Activity_organizerId")
+  Post_authorId          Post[]        @relation("Post_authorId")
+  Comment_authorId       Comment[]     @relation("Comment_authorId")
+  Friendship_requesterId Friendship[]  @relation("Friendship_requesterId")
+  Friendship_recipientId Friendship[]  @relation("Friendship_recipientId")
+  Follow_followerId      Follow[]      @relation("Follow_followerId")
+  Follow_followingId     Follow[]      @relation("Follow_followingId")
+  State_userId           State[]       @relation("State_userId")
+  Behavior_userId        Behavior[]    @relation("Behavior_userId")
+  ViewSession_userId     ViewSession[] @relation("ViewSession_userId")
+}
+
+model Activity {
+  id                     String        @id
+  organizerId            String
+  title                  String
+  body                   String
+  tags                   String
+  campus                 String
+  location               String
+  startsAt               String
+  endsAt                 String
+  deadline               String
+  capacity               Int
+  status                 String
+  createdAt              String
+  source                 String
+  posterTemplate         String        @default("orbit")
+  posterAspect           String        @default("portrait")
+  posterHighlight        String        @default("")
+  coverId                String?
+  organizer              User          @relation("Activity_organizerId", fields: [organizerId], references: [id], onDelete: Cascade)
+  Post_activityId        Post[]        @relation("Post_activityId")
+  State_activityId       State[]       @relation("State_activityId")
+  Behavior_activityId    Behavior[]    @relation("Behavior_activityId")
+  ViewSession_activityId ViewSession[] @relation("ViewSession_activityId")
+
+  @@index([organizerId])
+}
+
+model Post {
+  id                 String        @id
+  authorId           String
+  activityId         String?
+  title              String
+  body               String
+  tags               String
+  kind               String
+  purpose            String        @default("DISCUSSION")
+  mediaIds           String        @default("[]")
+  posterTemplate     String        @default("orbit")
+  posterAspect       String        @default("portrait")
+  posterHighlight    String        @default("")
+  createdAt          String
+  source             String
+  author             User          @relation("Post_authorId", fields: [authorId], references: [id], onDelete: Cascade)
+  activity           Activity?     @relation("Post_activityId", fields: [activityId], references: [id], onDelete: Cascade)
+  Comment_postId     Comment[]     @relation("Comment_postId")
+  State_postId       State[]       @relation("State_postId")
+  Behavior_postId    Behavior[]    @relation("Behavior_postId")
+  ViewSession_postId ViewSession[] @relation("ViewSession_postId")
+
+  @@index([authorId])
+  @@index([activityId])
+}
+
+model Comment {
+  id               String    @id
+  postId           String
+  authorId         String
+  parentId         String?
+  deletedAt        String?
+  body             String
+  createdAt        String
+  source           String
+  post             Post      @relation("Comment_postId", fields: [postId], references: [id], onDelete: Cascade)
+  author           User      @relation("Comment_authorId", fields: [authorId], references: [id], onDelete: Cascade)
+  parent           Comment?  @relation("Comment_parentId", fields: [parentId], references: [id], onDelete: NoAction)
+  Comment_parentId Comment[] @relation("Comment_parentId")
+
+  @@index([postId])
+  @@index([authorId])
+  @@index([parentId])
+}
+
+model Friendship {
+  id          String @id
+  requesterId String
+  recipientId String
+  status      String
+  createdAt   String
+  requester   User   @relation("Friendship_requesterId", fields: [requesterId], references: [id], onDelete: Cascade)
+  recipient   User   @relation("Friendship_recipientId", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, recipientId])
+  @@index([requesterId])
+  @@index([recipientId])
+}
+
+model Follow {
+  id          String @id
+  followerId  String
+  followingId String
+  createdAt   String
+  follower    User   @relation("Follow_followerId", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User   @relation("Follow_followingId", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+}
+
+model State {
+  id         String    @id
+  userId     String
+  postId     String?
+  activityId String?
+  kind       String
+  createdAt  String
+  user       User      @relation("State_userId", fields: [userId], references: [id], onDelete: Cascade)
+  post       Post?     @relation("State_postId", fields: [postId], references: [id], onDelete: Cascade)
+  activity   Activity? @relation("State_activityId", fields: [activityId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId, kind])
+  @@unique([userId, activityId, kind])
+  @@index([userId])
+  @@index([postId])
+  @@index([activityId])
+}
+
+model Behavior {
+  id          String    @id
+  userId      String
+  postId      String?
+  activityId  String?
+  kind        String
+  createdAt   String
+  effectiveMs Int
+  user        User      @relation("Behavior_userId", fields: [userId], references: [id], onDelete: Cascade)
+  post        Post?     @relation("Behavior_postId", fields: [postId], references: [id], onDelete: Cascade)
+  activity    Activity? @relation("Behavior_activityId", fields: [activityId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([postId])
+  @@index([activityId])
+}
+
+model ViewSession {
+  id          String    @id
+  userId      String
+  postId      String?
+  activityId  String?
+  startedAt   String
+  updatedAt   String
+  effectiveMs Int
+  closed      Boolean
+  user        User      @relation("ViewSession_userId", fields: [userId], references: [id], onDelete: Cascade)
+  post        Post?     @relation("ViewSession_postId", fields: [postId], references: [id], onDelete: Cascade)
+  activity    Activity? @relation("ViewSession_activityId", fields: [activityId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([postId])
+  @@index([activityId])
+}
+
+model DemoMeta {
+  id      String @id
+  version String
+  source  String
+  seed    Int
+  now     String
+}
+
+model AuthSession {
+  id        String @id
+  userId    String
+  expiresAt String
+  createdAt String
+
+  @@index([userId])
+}
+
+model MediaAsset {
+  id          String  @id
+  ownerId     String?
+  url         String
+  mime        String
+  width       Int
+  height      Int
+  alt         String
+  origin      String
+  sourceUrl   String?
+  attribution String?
+  createdAt   String
+
+  @@index([ownerId])
+}
+
+model ContentImportReceipt {
+  id        String @id
+  version   String
+  digest    String
+  createdAt String
+  counts    String
+}

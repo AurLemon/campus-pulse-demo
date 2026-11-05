@@ -1,0 +1,16 @@
+{
+	"name": "@campus/studio",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "nuxt dev --host 127.0.0.1",
+		"build": "nuxt build",
+		"typecheck": "nuxt typecheck"
+	},
+	"dependencies": {
+		"@campus/contracts": "workspace:*",
+		"@campus/domain": "workspace:*",
+		"@campus/recommendation": "workspace:*",
+		"@internationalized/date": "3.12.4"
+	}
+}

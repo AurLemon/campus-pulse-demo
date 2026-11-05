@@ -1,0 +1,44 @@
+{
+	"community": {
+		"brand": "在场",
+		"tagline": "发现同频，也听见不同。",
+		"navigation": "主要导航",
+		"home": "内容广场",
+		"activities": "活动频道",
+		"profile": "我的主页",
+		"publish": "写点什么",
+		"retry": "重新加载",
+		"loading": "正在加载",
+		"all": "全部",
+		"more": "加载更多",
+		"back": "返回广场",
+		"cancel": "取消",
+		"saving": "正在保存",
+		"notFound": "这里的内容已不存在",
+		"edit": "编辑",
+		"save": "保存活动",
+		"errors": {
+			"VALIDATION_FAILED": "请检查填写内容，修改后再提交。",
+			"ACTIVITY_FULL": "活动已经满员，可以先收藏。",
+			"REGISTRATION_CLOSED": "报名已经截止，当前无法报名。",
+			"NOT_FOUND": "内容已不存在，请刷新页面。",
+			"INTERNAL_ERROR": "暂时无法完成操作，请稍后重试。",
+			"CONFLICT": "状态已经发生变化，请刷新后确认。",
+			"INVALID_REPLY": "只能回复本帖的一级评论。",
+			"RATE_LIMITED": "操作有些频繁，请稍后再试。",
+			"NETWORK": "网络请求未完成，请检查连接后重试。",
+			"CAPACITY_BELOW_REGISTRATIONS": "容量不能低于当前有效报名人数。"
+		},
+		"invalidField": "请检查此项的格式、长度或数值范围。",
+		"topics": {
+			"photography": "摄影",
+			"technology": "技术",
+			"sports": "运动",
+			"art": "艺术",
+			"volunteer": "志愿服务",
+			"reading": "阅读",
+			"music": "音乐",
+			"career": "职业发展"
+		}
+	}
+}

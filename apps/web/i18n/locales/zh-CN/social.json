@@ -1,0 +1,12 @@
+{
+	"social": {
+		"unfollow": "取消关注",
+		"follow": "关注",
+		"addFriend": "发送好友请求",
+		"accept": "接受好友请求",
+		"friends": "已是好友",
+		"pending": "好友请求待接受",
+		"requests": "收到的好友请求",
+		"noRequests": "暂时没有待接受的好友请求。"
+	}
+}

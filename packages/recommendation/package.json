@@ -1,0 +1,12 @@
+{
+	"name": "@campus/recommendation",
+	"private": true,
+	"type": "module",
+	"exports": {
+		".": "./index.ts",
+		"./heap": "./heap.ts"
+	},
+	"dependencies": {
+		"@campus/contracts": "workspace:*"
+	}
+}

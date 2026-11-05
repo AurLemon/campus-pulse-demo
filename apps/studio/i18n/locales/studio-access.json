@@ -1,0 +1,28 @@
+{
+	"access": {
+		"showAll": "查看全部",
+		"hideAll": "仅搜索",
+		"pageSize": "每页人数",
+		"searchHint": "输入昵称搜索，或选择查看全部",
+		"total": "共 {count} 人",
+		"previous": "上一页",
+		"next": "下一页",
+		"open": "切换主站账户",
+		"title": "选择主站账户",
+		"search": "搜索昵称或账号",
+		"loading": "正在读取账户",
+		"loadError": "暂时无法读取账户，请确认主站正在运行。",
+		"linkError": "暂时无法生成登录链接，请重试。",
+		"retry": "重试",
+		"empty": "没有匹配的账户",
+		"preparing": "正在准备登录链接",
+		"expired": "链接已过期",
+		"regenerate": "重新生成链接",
+		"visit": "以 {name} 打开主站",
+		"roles": {
+			"STUDENT": "学生",
+			"ORGANIZER": "组织者",
+			"ADMIN": "管理员"
+		}
+	}
+}

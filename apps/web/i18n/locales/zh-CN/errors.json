@@ -1,0 +1,31 @@
+{
+	"errors": {
+		"badRequest": {
+			"title": "请求有误",
+			"description": "请检查输入内容后重新操作。"
+		},
+		"unauthorized": {
+			"title": "身份验证已失效"
+		},
+		"forbidden": {
+			"title": "无法访问此内容",
+			"description": "当前身份没有访问权限，请返回首页。"
+		},
+		"notFound": {
+			"title": "页面不存在",
+			"description": "链接可能有误，或内容已被移除。"
+		},
+		"conflict": {
+			"title": "内容状态已变化",
+			"description": "请返回页面确认最新状态后再操作。"
+		},
+		"tooManyRequests": {
+			"title": "操作过于频繁",
+			"description": "请稍后再试。"
+		},
+		"internalError": {
+			"title": "暂时无法完成请求",
+			"description": "请稍后重试，或返回首页。"
+		}
+	}
+}

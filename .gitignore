@@ -1,0 +1,40 @@
+# 系统与编辑器临时文件
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp
+
+# 依赖、构建产物、运行记录
+node_modules/
+.nuxt/
+.output/
+.data/
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+dist/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+
+# 课件、报告、答辩材料、原始采集素材不进入代码仓库
+*.[pP][pP][tT]
+*.[pP][pP][tT][xX]
+*.[pP][dD][fF]
+*.[dD][oO][cC]
+*.[dD][oO][cC][xX]
+*.[xX][lL][sS]
+*.[xX][lL][sS][xX]
+*.key
+*.pages
+*.zip
+*.7z
+materials/
+reports/
+screenshots/
+data/raw/
+
+generated/
