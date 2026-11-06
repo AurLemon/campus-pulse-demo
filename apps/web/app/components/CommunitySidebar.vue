@@ -47,7 +47,7 @@ function toggle(tag: string) {
 		<section v-if="data?.user" class="rail-panel user-summary">
 			<template v-if="data?.user"
 				><div class="rail-user">
-					<UserAvatar :name="data.user.name" large />
+					<UserAvatar :src="data.user.avatar" :name="data.user.name" large />
 					<div>
 						<h2>{{ data.user.name }}</h2>
 					</div>

@@ -9,9 +9,12 @@ datasource db {
 }
 
 model User {
-  id                     String        @id
+  bookStates             BookState[]
+  bookLoans              BookLoan[]
+  bookReadingRecords     BookReadingRecord[]
+  id                     String              @id
   name                   String
-  account                String?       @unique
+  account                String?             @unique
   passwordHash           String?
   bio                    String
   campus                 String
@@ -19,16 +22,16 @@ model User {
   interests              String
   createdAt              String
   source                 String
-  Activity_organizerId   Activity[]    @relation("Activity_organizerId")
-  Post_authorId          Post[]        @relation("Post_authorId")
-  Comment_authorId       Comment[]     @relation("Comment_authorId")
-  Friendship_requesterId Friendship[]  @relation("Friendship_requesterId")
-  Friendship_recipientId Friendship[]  @relation("Friendship_recipientId")
-  Follow_followerId      Follow[]      @relation("Follow_followerId")
-  Follow_followingId     Follow[]      @relation("Follow_followingId")
-  State_userId           State[]       @relation("State_userId")
-  Behavior_userId        Behavior[]    @relation("Behavior_userId")
-  ViewSession_userId     ViewSession[] @relation("ViewSession_userId")
+  Activity_organizerId   Activity[]          @relation("Activity_organizerId")
+  Post_authorId          Post[]              @relation("Post_authorId")
+  Comment_authorId       Comment[]           @relation("Comment_authorId")
+  Friendship_requesterId Friendship[]        @relation("Friendship_requesterId")
+  Friendship_recipientId Friendship[]        @relation("Friendship_recipientId")
+  Follow_followerId      Follow[]            @relation("Follow_followerId")
+  Follow_followingId     Follow[]            @relation("Follow_followingId")
+  State_userId           State[]             @relation("State_userId")
+  Behavior_userId        Behavior[]          @relation("Behavior_userId")
+  ViewSession_userId     ViewSession[]       @relation("ViewSession_userId")
 }
 
 model Activity {
@@ -86,6 +89,7 @@ model Post {
 }
 
 model Comment {
+  mediaIds         String    @default("[]")
   id               String    @id
   postId           String
   authorId         String
@@ -223,4 +227,142 @@ model ContentImportReceipt {
   digest    String
   createdAt String
   counts    String
+}
+
+model Book {
+  id          String              @id
+  title       String
+  authors     String
+  publisher   String
+  description String
+  language    String
+  isbn13      String?             @unique
+  workKey     String              @unique
+  coverUrl    String
+  tags        String
+  academic    Boolean             @default(false)
+  source      String
+  sourceUrl   String
+  fetchedAt   String
+  copies      Int                 @default(3)
+  states      BookState[]
+  loans       BookLoan[]
+  records     BookReadingRecord[]
+}
+
+model BookState {
+  id        String  @id
+  userId    String
+  bookId    String
+  status    String
+  favorite  Boolean @default(false)
+  updatedAt String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book      Book    @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, bookId])
+  @@index([userId])
+}
+
+model BookLoan {
+  id         String  @id
+  userId     String
+  bookId     String
+  borrowedAt String
+  dueAt      String
+  returnedAt String?
+  activeKey  String? @unique
+  source     String
+  user       User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book       Book    @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@index([userId, bookId])
+  @@index([bookId, returnedAt])
+}
+
+model BookReadingRecord {
+  id         String @id
+  userId     String
+  bookId     String
+  kind       String
+  occurredAt String
+  source     String
+  user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book       Book   @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@index([userId, occurredAt])
+  @@index([bookId])
+}
+
+// Add to User: bookStates BookState[], bookLoans BookLoan[], bookReadingRecords BookReadingRecord[]
+
+// Add to Comment: mediaIds String @default("[]")
+model Conversation {
+  id        String @id
+  userLow   String
+  userHigh  String
+  sequence  Int    @default(0)
+  updatedAt String
+
+  @@unique([userLow, userHigh])
+}
+
+model DirectMessage {
+  id              String @id
+  conversationId  String
+  senderId        String
+  body            String
+  mediaIds        String @default("[]")
+  sequence        Int
+  clientMessageId String
+  createdAt       String
+
+  @@unique([conversationId, sequence])
+  @@unique([senderId, clientMessageId])
+  @@index([conversationId, sequence])
+}
+
+model ConversationRead {
+  id             String @id
+  conversationId String
+  userId         String
+  sequence       Int    @default(0)
+
+  @@unique([conversationId, userId])
+}
+
+model Notification {
+  id          String  @id
+  recipientId String
+  actorId     String
+  kind        String
+  targetType  String
+  targetId    String
+  createdAt   String
+  readAt      String?
+
+  @@index([recipientId, createdAt])
+}
+
+model CommunityOutbox {
+  id          String  @id
+  kind        String
+  payload     String
+  createdAt   String
+  deliveredAt String?
+
+  @@index([deliveredAt, createdAt])
+}
+
+model Presence {
+  userId     String @id
+  lastSeenAt String
+}
+
+model AgentOperationReceipt {
+  id        String @id
+  actorId   String
+  action    String
+  result    String
+  createdAt String
 }

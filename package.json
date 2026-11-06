@@ -7,11 +7,11 @@
 		"node": "^24.15.0"
 	},
 	"scripts": {
-		"dev": "pnpm dev:web",
+		"dev": "node scripts/dev.ts",
 		"build": "pnpm build:web && pnpm build:studio",
 		"preview": "nuxt preview apps/web",
 		"postinstall": "prisma generate && nuxt prepare apps/web && nuxt prepare apps/studio",
-		"lint": "eslint apps/web/app apps/web/server apps/studio/app apps/studio/server packages tools scripts modules types",
+		"lint": "eslint apps/web/app apps/web/server apps/studio/app apps/studio/server apps/agents packages tools scripts modules types",
 		"format": "prettier --write .",
 		"format:check": "prettier --check .",
 		"typecheck": "nuxt typecheck apps/web && nuxt typecheck apps/studio && tsc -p scripts/tsconfig.json",
@@ -24,7 +24,7 @@
 		"data:reset": "node tools/content/cli.ts reset",
 		"data:generate": "node tools/content/generate.ts",
 		"dev:web": "nuxt dev apps/web --host 127.0.0.1",
-		"dev:studio": "nuxt dev apps/studio --host 127.0.0.1 --port 3001",
+		"dev:studio": "node scripts/studio-with-agents.ts",
 		"build:web": "nuxt build apps/web",
 		"build:studio": "nuxt build apps/studio",
 		"db:push": "node scripts/database.ts db push",
@@ -37,7 +37,15 @@
 		"data:assets:pack": "node tools/content/bundle-cli.ts pack --assets",
 		"data:assets:unpack": "node tools/content/bundle-cli.ts unpack --assets",
 		"data:snapshots:pack": "node tools/content/bundle-cli.ts pack --snapshots",
-		"data:snapshots:unpack": "node tools/content/bundle-cli.ts unpack --snapshots"
+		"data:snapshots:unpack": "node tools/content/bundle-cli.ts unpack --snapshots",
+		"agents:run": "node apps/agents/worker.ts",
+		"agents:check": "node apps/agents/check.ts",
+		"data:natural": "node tools/content/refresh-natural.ts",
+		"data:books": "node tools/books/import.ts --from-bundle",
+		"data:books:pack": "node tools/books/bundle.ts pack",
+		"data:books:unpack": "node tools/books/bundle.ts unpack",
+		"agents:doctor": "node tools/agents/doctor.ts",
+		"data:ads": "node tools/content/append-campus-ads.ts"
 	},
 	"dependencies": {
 		"@campus/contracts": "workspace:*",
@@ -58,6 +66,7 @@
 		"vue": "3.5.44"
 	},
 	"devDependencies": {
+		"@earendil-works/pi-coding-agent": "1.5.0",
 		"@iconify-json/lucide": "^1.2.150",
 		"@nuxt/eslint": "1.17.0",
 		"@tailwindcss/vite": "4.3.4",

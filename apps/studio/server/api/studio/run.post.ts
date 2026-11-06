@@ -13,7 +13,9 @@ export default defineEventHandler(async (event) => {
 	if (!body || typeof body !== 'object' || Array.isArray(body))
 		throw createError({ statusCode: 422, statusMessage: 'INVALID_INPUT' })
 	const value = body as Record<string, unknown>
-	const { snapshot, revision } = await readStudioSnapshot()
+	const { snapshot, revision } = await readStudioSnapshot(
+		value.crossDomain !== false,
+	)
 	const seed = value.seed ?? randomUUID()
 	if (typeof seed !== 'string' || !seed || seed.length > 128)
 		throw createError({ statusCode: 422, statusMessage: 'INVALID_INPUT' })

@@ -71,6 +71,7 @@ export async function establishSession(event: H3Event, userId: string) {
 			expiresAt: new Date(+now + 30 * 86400000).toISOString(),
 		},
 	})
+
 	setCookie(event, 'campus_session', token, {
 		httpOnly: true,
 		sameSite: 'lax',

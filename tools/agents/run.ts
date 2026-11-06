@@ -1,9 +1,10 @@
 import { readFile, writeFile, mkdir, appendFile } from 'node:fs/promises'
-import { resolve, dirname, delimiter } from 'node:path'
-import { homedir } from 'node:os'
-import { execFileSync, spawn } from 'node:child_process'
+import { resolve } from 'node:path'
+import { spawn } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 import { readGlobalAccess } from './access.ts'
+import { locateSdk } from './sdk.ts'
+import { supportedModel } from './environment.ts'
 
 interface PiUsage {
 	input?: number
@@ -24,6 +25,7 @@ interface PiEvent {
 	error?: PiMessage
 }
 interface Runtime {
+	registerProvider(provider: string, config: Record<string, unknown>): void
 	getModel(provider: string, id: string): Record<string, unknown> | undefined
 	streamSimple(
 		model: Record<string, unknown>,
@@ -36,15 +38,25 @@ interface PiSdk {
 }
 // Native Node fetch ignores HTTP(S)_PROXY unless enabled at process startup.
 // Re-exec this bounded tool only; no shell, provider, or system proxy configuration changes.
+const explicitProxy = process.env.CAMPUS_AGENT_PROXY_URL?.trim()
 if (
 	!process.env.CAMPUS_AGENT_PROXY_BOOTSTRAPPED &&
-	(process.env.HTTPS_PROXY || process.env.HTTP_PROXY)
+	(explicitProxy || process.env.HTTPS_PROXY || process.env.HTTP_PROXY)
 ) {
 	const child = spawn(
 		process.execPath,
 		['--use-env-proxy', ...process.argv.slice(1)],
 		{
-			env: { ...process.env, CAMPUS_AGENT_PROXY_BOOTSTRAPPED: '1' },
+			env: {
+				...process.env,
+				...(explicitProxy
+					? { HTTPS_PROXY: explicitProxy, HTTP_PROXY: explicitProxy }
+					: {}),
+				NO_PROXY: [process.env.NO_PROXY, 'localhost', '127.0.0.1', '::1']
+					.filter(Boolean)
+					.join(','),
+				CAMPUS_AGENT_PROXY_BOOTSTRAPPED: '1',
+			},
 			stdio: 'inherit',
 		},
 	)
@@ -65,7 +77,9 @@ if (process.argv.includes('--read-only'))
 		'SDK_CONTENT_RUNNER_IS_TOOL_FREE: use explicit reviewed input instead of file access',
 	)
 const access = await readGlobalAccess()
-const model = process.env.CAMPUS_AGENT_MODEL ?? 'deepseek-v4.1-flash-1017'
+const model = process.env.CAMPUS_AGENT_MODEL || supportedModel
+if (model !== supportedModel)
+	throw new Error('AGENT_MODEL_PRICING_NOT_CONFIGURED')
 const job = resolve(
 	process.env.CAMPUS_AGENT_CWD ??
 		`.data/agents/jobs/${Date.now()}-${process.pid}`,
@@ -76,39 +90,11 @@ const sanitize = (s: string) =>
 	s
 		.replaceAll(access.apiKey, '[REDACTED]')
 		.replace(/sk-[A-Za-z0-9_-]{12,}/g, '[REDACTED]')
-async function locateSdk() {
-	if (process.env.CAMPUS_PI_SDK_ROOT)
-		return resolve(
-			process.env.CAMPUS_PI_SDK_ROOT,
-			'@earendil-works/pi-coding-agent/dist/core/model-runtime.js',
-		)
-	for (const directory of (process.env.PATH ?? '').split(delimiter)) {
-		try {
-			const shim = await readFile(
-				resolve(directory, process.platform === 'win32' ? 'pi.cmd' : 'pi'),
-				'utf8',
-			)
-			const target = shim.match(/# cmd-shim-target=(.+)/)?.[1]?.trim()
-			if (target) return resolve(dirname(target), '../core/model-runtime.js')
-		} catch {
-			// A PATH entry may not contain the global Pi shim.
-		}
-	}
-	const globalModules = execFileSync('pnpm', ['root', '-g'], {
-		encoding: 'utf8',
-	}).trim()
-	return resolve(
-		globalModules,
-		'@earendil-works/pi-coding-agent/dist/core/model-runtime.js',
-	)
-}
-const sdkPath = await locateSdk()
-const sdk = (await import(pathToFileURL(sdkPath).href)) as PiSdk
-const agentDir =
-	process.env.PI_CODING_AGENT_DIR ?? resolve(homedir(), '.pi/agent')
+const sdkLocation = await locateSdk()
+const sdk = (await import(pathToFileURL(sdkLocation.path).href)) as PiSdk
 const maxTokens = Math.min(
 	32768,
-	Math.max(1024, Number(process.env.CAMPUS_AGENT_MAX_TOKENS) || 16384),
+	Math.max(128, Number(process.env.CAMPUS_AGENT_MAX_TOKENS) || 16384),
 )
 const timeoutMs = Math.min(
 	300000,
@@ -132,10 +118,15 @@ const metadata: {
 	processProxyEnabled?: boolean
 	configuredMaxTokens?: unknown
 	responseStatus?: number
+	sdkSource?: string
+	configSource?: string
+	transportError?: string
 	payloadMaxTokens?: unknown
 	wire?: Record<string, unknown>
 } = {
-	sdk: 'global-pi-model-runtime',
+	sdk: 'pi-model-runtime',
+	sdkSource: sdkLocation.source,
+	configSource: access.source,
 	maxTokens,
 	timeoutMs,
 	processProxyEnabled:
@@ -144,18 +135,42 @@ const metadata: {
 }
 try {
 	const runtime = await sdk.ModelRuntime.create({
-		modelsPath: resolve(agentDir, 'models.json'),
-		authPath: resolve(agentDir, 'auth.json'),
+		modelsPath: access.directory
+			? resolve(access.directory, 'models.json')
+			: null,
+		authPath: resolve(job, 'auth.json'),
 		allowModelNetwork: false,
 		refreshOnCreate: false,
 	})
+	const api = process.env.CAMPUS_AGENT_API || 'openai-completions'
+	if (!['openai-completions', 'openai-responses'].includes(api))
+		throw new Error('UNSUPPORTED_TASK_API')
+	if (access.source === 'environment')
+		runtime.registerProvider('campus-hub', {
+			baseUrl: access.baseUrl,
+			api,
+			apiKey: access.apiKey,
+			models: [
+				{
+					id: model,
+					name: model,
+					reasoning: false,
+					input: ['text'],
+					cost: {
+						input: 0.12,
+						output: 0.48,
+						cacheRead: 0.12,
+						cacheWrite: 0.12,
+					},
+					contextWindow: 131072,
+					maxTokens,
+				},
+			],
+		})
 	const configured = runtime.getModel('campus-hub', model)
 	if (!configured) throw new Error('GLOBAL_PI_MODEL_NOT_CONFIGURED')
 	metadata.configuredMaxTokens = configured.maxTokens
 	// Clone only for this request. Never mutate the global provider or models.json.
-	const api = process.env.CAMPUS_AGENT_API ?? 'openai-completions'
-	if (!['openai-completions', 'openai-responses'].includes(api))
-		throw new Error('UNSUPPORTED_TASK_API')
 	const taskModel = { ...configured, maxTokens, api, reasoning: false }
 	const stream = runtime.streamSimple(
 		taskModel,
@@ -167,6 +182,7 @@ try {
 		},
 		{
 			maxTokens,
+			apiKey: access.apiKey,
 			reasoning: 'off',
 			maxRetries: 0,
 			timeoutMs,
@@ -203,7 +219,25 @@ try {
 						/* Metadata is optional and never includes credentials or messages. */
 					}
 				}
-				return fetch(input, init)
+				try {
+					const response = await fetch(input, init)
+					metadata.responseStatus = response.status
+					return response
+				} catch (failure) {
+					const details: string[] = []
+					let cause: unknown = failure
+					for (let depth = 0; depth < 4 && cause instanceof Error; depth++) {
+						const value = cause as Error & { code?: string }
+						details.push(
+							[value.name, value.code, value.message]
+								.filter(Boolean)
+								.join(': '),
+						)
+						cause = value.cause
+					}
+					metadata.transportError = sanitize(details.join(' / ')).slice(0, 500)
+					throw failure
+				}
 			},
 			onPayload: (payload: unknown) => {
 				const value = payload as Record<string, unknown>
@@ -257,6 +291,8 @@ try {
 } finally {
 	clearTimeout(timer)
 }
+if (error && metadata.transportError)
+	error = sanitize(`${error} (${metadata.transportError})`)
 const usage = {
 	input: final?.usage?.input ?? 0,
 	output: final?.usage?.output ?? 0,

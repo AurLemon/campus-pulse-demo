@@ -1,14 +1,17 @@
+import '../agents/environment.ts'
 import { resolveSnapshotFile } from './snapshot-bundle.ts'
 import { readFile, mkdir, copyFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { importContentBatch } from '@campus/domain/import'
 import { db, dataDirectory } from '@campus/domain/prisma'
-import type { Snapshot } from '@campus/contracts'
+import type { ContentImportBatch, Snapshot } from '@campus/contracts'
 import { attachMedia, type Asset } from './media.ts'
 import { validateSnapshot } from './validate.ts'
 import { ensureAssetCache } from './asset-bundle.ts'
 
-const file = await resolveSnapshotFile(process.argv[2] ?? 'pulse-full.json')
+const file = await resolveSnapshotFile(
+	process.argv[2] ?? 'natural-v3-media.json',
+)
 let snapshot = JSON.parse(await readFile(file, 'utf8')) as Snapshot
 for (const row of [...snapshot.users, ...snapshot.activities]) {
 	const names: Record<string, string> = {
@@ -21,6 +24,21 @@ for (const row of [...snapshot.users, ...snapshot.activities]) {
 const errors = validateSnapshot(snapshot)
 if (errors.length)
 	throw new Error(`INVALID_SNAPSHOT:${errors.slice(0, 10).join(',')}`)
+const adsBatch = process.argv[2]
+	? undefined
+	: (JSON.parse(
+			await readFile(await resolveSnapshotFile('ads.json'), 'utf8'),
+		) as ContentImportBatch)
+if (adsBatch) {
+	const adsErrors = validateSnapshot(adsBatch.snapshot)
+	if (
+		adsBatch.id !== 'campus-ads-v1' ||
+		adsBatch.snapshot.users.length !== 3 ||
+		adsBatch.snapshot.posts.length !== 3 ||
+		adsErrors.length
+	)
+		throw new Error(`INVALID_ADS_PRESET:${adsErrors.slice(0, 10).join(',')}`)
+}
 const assetCache = await ensureAssetCache()
 const assets = JSON.parse(
 	await readFile(resolve(assetCache, 'manifest.json'), 'utf8'),
@@ -33,7 +51,8 @@ for (const asset of assets)
 		resolve(assetCache, `${asset.id}.webp`),
 		resolve(mediaDirectory, `${asset.id}.webp`),
 	)
-snapshot = attachMedia(snapshot, assets)
+if (!snapshot.version.startsWith('campus-natural-'))
+	snapshot = attachMedia(snapshot, assets)
 try {
 	await importContentBatch({
 		id: snapshot.version,
@@ -41,6 +60,10 @@ try {
 		snapshot,
 		media: assets.map(({ file: _, tags: __, license: ___, ...m }) => m),
 	})
+	if (adsBatch) {
+		const extra = await importContentBatch(adsBatch)
+		console.log(JSON.stringify({ presetExtra: true, ...extra }))
+	}
 	console.log(
 		JSON.stringify({
 			imported: true,

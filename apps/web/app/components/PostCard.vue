@@ -127,7 +127,7 @@ const cover = computed(() => post.value.media?.[0] ?? null)
 			</div>
 			<div class="card-footer">
 				<NuxtLink :to="`/users/${post.author.id}`" class="author"
-					><UserAvatar :name="post.author.name" />
+					><UserAvatar :src="post.author.avatar" :name="post.author.name" />
 					<span>{{ post.author.name }}</span></NuxtLink
 				><button
 					type="button"

@@ -13,7 +13,8 @@ Web 使用 Nuxt 4、Vue 3、TypeScript、Nuxt UI、TailwindCSS，业务后台使
 - `packages/domain`：仅服务端引用，承担事务、权限所需的数据访问、查询与导入扩展。
 - `apps/web/server`：HTTP 参数、身份、错误映射与领域调用，不能挂载模拟身份、数据库恢复或生成接口。
 - `apps/web/app`：面向 DTO 渲染，不依赖全站快照，不把 Studio 组件混入产品。
-- `apps/studio`：主站数据库只读观察界面，不写入，不回退离线快照。
+- `apps/studio`：主站数据库只读观察界面，不写业务库，不回退离线快照，运行控制只修改独立 Agent 运行库与预算账本。
+- `apps/agents`：独立进程与运行数据库，通过受限服务 API 执行 Synthetic 角色动作，不能冒用真实账户或读取无关私信。
 - `tools/content` 与 `tools/agents`：独立工具，运行结果与费用文件不进入客户端或产品部署。
 
 本项目允许按当前任务直接重构，不要求旧目录、接口或数据库的兼容层。结构调整前保留可恢复数据与原始内容，不清理无关源码成果、费用账本或凭据。

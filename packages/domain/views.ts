@@ -1,4 +1,5 @@
 import { db } from './prisma.ts'
+import { defaultUserAvatar } from '@campus/contracts'
 import type {
 	PublicUser,
 	ActivityView,
@@ -10,10 +11,13 @@ import type {
 type UserRow = Awaited<ReturnType<typeof db.user.findFirstOrThrow>>
 type ActivityRow = Awaited<ReturnType<typeof db.activity.findFirstOrThrow>>
 type PostRow = Awaited<ReturnType<typeof db.post.findFirstOrThrow>>
-export function publicUser(u: UserRow): PublicUser {
+export function publicUser(
+	u: UserRow & { avatar?: string | null },
+): PublicUser {
 	return {
 		id: u.id,
 		name: u.name,
+		avatar: u.avatar || defaultUserAvatar(u.id),
 		bio: u.bio,
 		campus: u.campus,
 		role: u.role as PublicUser['role'],

@@ -139,7 +139,7 @@ onBeforeUnmount(() => {
 	<div class="studio-shell">
 		<StudioHeader
 			><UButton
-				to="/"
+				to="/community"
 				color="neutral"
 				variant="ghost"
 				icon="i-lucide-arrow-left"

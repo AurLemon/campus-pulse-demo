@@ -2,6 +2,7 @@
 const { t } = useI18n(),
 	route = useRoute()
 const { user, logout } = await useCampus()
+const { unread } = useMessageStatus(() => user.value?.id)
 const { openAuth, authLocation } = useAuthOverlay()
 const { composeLocation, openCompose } = useComposeOverlay()
 const firstLoad = useState('brand-first-load', () => true)
@@ -10,6 +11,8 @@ onMounted(() => {
 })
 const nav = computed(() => [
 	{ to: '/', label: t('ui.discover'), icon: 'i-lucide-compass' },
+	{ to: '/books', label: t('ui.books'), icon: 'i-lucide-book-open' },
+	{ to: '/messages', label: t('ui.messages'), icon: 'i-lucide-message-circle' },
 	{
 		to: '/activities',
 		label: t('ui.activities'),
@@ -28,7 +31,13 @@ const hasRail = computed(
 )
 </script>
 <template>
-	<div class="campus-shell" :class="{ 'shell-with-rail': hasRail }">
+	<div
+		class="campus-shell"
+		:class="{
+			'shell-with-rail': hasRail,
+			'shell-messages': route.path === '/messages',
+		}"
+	>
 		<a class="skip-content" href="#main-content">{{
 			t('common.skipContent')
 		}}</a>
@@ -44,11 +53,17 @@ const hasRail = computed(
 					:class="{
 						selected:
 							route.path === item.to ||
-							(item.to === '/activities' &&
-								route.path.startsWith('/activities')),
+							(item.to !== '/' && route.path.startsWith(item.to + '/')),
 					}"
 					:aria-label="item.label"
-					><UIcon :name="item.icon" /><span>{{ item.label }}</span></NuxtLink
+					><UIcon :name="item.icon" /><span
+						>{{ item.label
+						}}<span
+							v-if="item.to === '/messages' && unread"
+							class="message-count"
+							>{{ unread > 99 ? '99+' : unread }}</span
+						></span
+					></NuxtLink
 				>
 			</nav>
 			<UButton
@@ -73,7 +88,7 @@ const hasRail = computed(
 				><ThemeSwitcher />
 				<div v-if="user" class="sidebar-account">
 					<NuxtLink :to="`/users/${user.id}`" class="author"
-						><UserAvatar :name="user.name" /><span>{{
+						><UserAvatar :src="user.avatar" :name="user.name" /><span>{{
 							user.name
 						}}</span></NuxtLink
 					><UButton
@@ -93,6 +108,14 @@ const hasRail = computed(
 			<NuxtLink to="/"><BrandMark /></NuxtLink>
 			<div>
 				<UButton
+					:to="composeLocation()"
+					@click="openCompose"
+					icon="i-lucide-plus"
+					variant="ghost"
+					color="neutral"
+					:aria-label="t('ui.publish')"
+				/>
+				<UButton
 					to="/?search=1"
 					icon="i-lucide-search"
 					color="neutral"
@@ -101,33 +124,67 @@ const hasRail = computed(
 				/><ThemeSwitcher />
 			</div>
 		</header>
-		<main id="main-content" class="main-column" tabindex="-1"><slot /></main>
-		<CommunitySidebar v-if="hasRail" />
+		<main
+			id="main-content"
+			class="main-column"
+			:class="{ 'messages-main': route.path === '/messages' }"
+			tabindex="-1"
+		>
+			<slot />
+		</main>
+		<div class="community-rail-slot" :inert="!hasRail" :aria-hidden="!hasRail">
+			<CommunitySidebar />
+		</div>
 		<nav class="mobile-nav">
-			<NuxtLink :to="nav[0]!.to" :class="{ selected: route.path === '/' }"
-				><UIcon name="i-lucide-compass" /><span>{{
-					t('ui.discover')
-				}}</span></NuxtLink
-			><NuxtLink
-				to="/activities"
-				:class="{ selected: route.path.startsWith('/activities') }"
-				><UIcon name="i-lucide-calendar-days" /><span>{{
-					t('ui.activities')
-				}}</span></NuxtLink
-			><NuxtLink
-				:to="composeLocation()"
-				@click="openCompose"
-				class="mobile-publish"
-				><UIcon name="i-lucide-plus" /><span>{{
-					t('ui.publish')
-				}}</span></NuxtLink
-			><NuxtLink
-				:to="nav[2]!.to"
-				:class="{ selected: route.path.startsWith('/users') }"
-				><UIcon name="i-lucide-user-round" /><span>{{
-					t('ui.profile')
-				}}</span></NuxtLink
+			<NuxtLink
+				v-for="item in nav"
+				:key="item.icon"
+				:to="item.to"
+				:class="{
+					selected:
+						route.path === item.to ||
+						(item.to !== '/' && route.path.startsWith(item.to + '/')),
+				}"
+				><UIcon :name="item.icon" /><span
+					>{{ item.label
+					}}<span
+						v-if="item.to === '/messages' && unread"
+						class="message-count"
+						>{{ unread > 99 ? '99+' : unread }}</span
+					></span
+				></NuxtLink
 			>
 		</nav>
 	</div>
 </template>
+
+<style scoped>
+.campus-shell.shell-messages {
+	column-gap: 0;
+	height: 100dvh;
+	min-height: 0;
+	overflow: hidden;
+}
+.messages-main {
+	height: 100dvh;
+	min-height: 0;
+	overflow: hidden;
+	padding-block: 0;
+}
+@media (max-width: 767px) {
+	.messages-main {
+		height: calc(100dvh - 68px);
+		padding-top: 15px;
+		padding-bottom: calc(86px + env(safe-area-inset-bottom));
+	}
+}
+
+.message-count {
+	margin-left: 5px;
+	padding: 1px 5px;
+	border-radius: 999px;
+	background: var(--ui-primary);
+	color: white;
+	font-size: 11px;
+}
+</style>

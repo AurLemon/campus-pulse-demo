@@ -64,7 +64,9 @@ export async function optionalActor(event: H3Event) {
 	const id = createHash('sha256').update(token).digest('hex')
 	const session = await db.authSession.findUnique({ where: { id } })
 	if (!session || session.expiresAt <= new Date().toISOString()) return null
-	return db.user.findUnique({ where: { id: session.userId } })
+	const user = await db.user.findUnique({ where: { id: session.userId } })
+
+	return user
 }
 export async function actor(event: H3Event) {
 	const user = await optionalActor(event)

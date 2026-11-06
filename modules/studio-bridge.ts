@@ -37,7 +37,7 @@ export default defineNuxtModule({
 		addDevServerHandler({
 			handler: defineEventHandler((event) => {
 				const path = event.path.split('?')[0]!
-				if (!paths.has(path)) return
+				if (!paths.has(path) && !path.startsWith('/api/agent/')) return
 				// Remove all client-supplied attestations before validating the original TCP connection.
 				delete event.node.req.headers['x-campus-studio-proof']
 				delete event.node.req.headers['x-campus-studio-original-origin']

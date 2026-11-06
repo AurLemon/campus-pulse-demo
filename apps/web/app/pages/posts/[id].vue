@@ -1,9 +1,21 @@
 <script setup lang="ts">
-const route = useRoute()
+definePageMeta({
+	middleware: (to) => {
+		const {
+			activity: _activity,
+			compose: _compose,
+			book: _book,
+			...query
+		} = to.query
+		return navigateTo(
+			{
+				path: '/',
+				query: { ...query, post: String(to.params.id) },
+				hash: to.hash,
+			},
+			{ replace: true, redirectCode: 302 },
+		)
+	},
+})
 </script>
-<template>
-	<PostDetailContent
-		:key="String(route.params.id)"
-		:post-id="String(route.params.id)"
-	/>
-</template>
+<template><span /></template>

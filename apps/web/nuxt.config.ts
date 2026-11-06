@@ -1,3 +1,4 @@
+import '../../tools/agents/environment.ts'
 import studioBridge from '../../modules/studio-bridge'
 export default defineNuxtConfig({
 	compatibilityDate: '2026-11-03',
@@ -25,6 +26,8 @@ export default defineNuxtConfig({
 				name: '简体中文',
 				files: [
 					'zh-CN/app.json',
+					'zh-CN/messages.json',
+					'zh-CN/books.json',
 					'zh-CN/admin.json',
 					'zh-CN/common.json',
 					'zh-CN/errors.json',

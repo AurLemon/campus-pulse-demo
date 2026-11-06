@@ -46,7 +46,7 @@ export function contentPlan(
 				: [2, 0, 1, 3][index % 4]!
 	return {
 		id: `p${index + 1}`,
-		topic: `${t.topic}，具体讨论${facets[t.tag]![Math.floor(index / 8) % 15]}，情境：${contexts[Math.floor(index / 120) % 10]}`,
+		topic: `${t.topic}，具体讨论${facets[t.tag]![Math.floor(index / 8) % facets[t.tag]!.length]}，情境：${contexts[Math.floor(index / 120) % 10]}`,
 		commentVoices: Array.from(
 			{ length: comments },
 			(_, j) =>

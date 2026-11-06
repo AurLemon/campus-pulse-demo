@@ -161,7 +161,7 @@ watch(
 					:to="`/users/${comment.authorId}`"
 					class="comment-thread__avatar"
 					:aria-label="comment.author.name"
-					><UserAvatar :name="comment.author.name"
+					><UserAvatar :src="comment.author.avatar" :name="comment.author.name"
 				/></NuxtLink>
 				<div class="comment-thread__content">
 					<div class="comment-thread__byline">
@@ -241,6 +241,19 @@ watch(
 					>
 						{{ comment.deleted ? t('profileComments.deleted') : comment.body }}
 					</p>
+					<div
+						v-if="!comment.deleted && comment.media?.length"
+						class="comment-thread__media"
+					>
+						<a
+							v-for="asset in comment.media"
+							:key="asset.id"
+							:href="asset.url"
+							target="_blank"
+							rel="noopener"
+							><img :src="asset.url" :alt="asset.alt" loading="lazy"
+						/></a>
+					</div>
 					<div class="comment-thread__meta">
 						<time :datetime="comment.createdAt">{{
 							date(comment.createdAt)
@@ -312,6 +325,18 @@ watch(
 	</UModal>
 </template>
 <style scoped>
+.comment-thread__media {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 8px;
+}
+.comment-thread__media img {
+	max-width: 160px;
+	max-height: 160px;
+	object-fit: contain;
+	border-radius: 8px;
+}
 .comment-thread,
 .comment-thread__replies {
 	margin: 0;

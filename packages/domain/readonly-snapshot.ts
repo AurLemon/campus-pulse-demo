@@ -1,3 +1,4 @@
+import { addBookInterestSignals } from './book-interest-projection.ts'
 import { PrismaClient } from '../../generated/prisma/client.ts'
 import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
 import { readSnapshot } from './snapshot-reader.ts'
@@ -5,6 +6,7 @@ import { readSnapshot } from './snapshot-reader.ts'
 export async function loadReadOnlySnapshot(
 	url: string,
 	now = new Date().toISOString(),
+	options: { crossDomain?: boolean } = {},
 ) {
 	if (!url.startsWith('file:')) throw new Error('SQLITE_FILE_URL_REQUIRED')
 	const db = new PrismaClient({
@@ -16,7 +18,10 @@ export async function loadReadOnlySnapshot(
 		}),
 	})
 	try {
-		return await readSnapshot(db, now)
+		const snapshot = await readSnapshot(db, now)
+		return options.crossDomain === false
+			? snapshot
+			: await addBookInterestSignals(db, snapshot)
 	} finally {
 		await db.$disconnect()
 	}

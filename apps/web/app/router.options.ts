@@ -9,6 +9,7 @@ export default <RouterConfig>{
 			to.path === from.path &&
 			(to.query.post !== from.query.post ||
 				to.query.activity !== from.query.activity ||
+				to.query.book !== from.query.book ||
 				to.query.auth !== from.query.auth ||
 				to.query.compose !== from.query.compose)
 		)

@@ -8,10 +8,10 @@
 - `.data/snapshots-cache/full.json`：保留的旧完整基线（1200 帖/3600 评论），未为新目标伪改原始数据。
 - `tools/content/generated-content.tar.gz`：Git 中保存的生成中间资料归档，包含原有批次、人物、逐帖检查点、进度和接受记录。
 - `.data/content-cache/pulse-v1`、`.data/content-cache/pulse-v2`：归档自动还原后的本地工作副本，不单独提交展开文件。
-- `.data/snapshots-cache/pulse-sample.json`：小样输出。`pulse-full.json` 为当前完整内容包，版本 `campus-synthetic-pulse-v2-1000`，200 用户、120 活动、1000 帖、3000 评论（2250 一级评论、750 回复）、601 好友记录（600 已接受）、1000 关注、4216 当前状态、24550 逻辑行为、15753 阅读会话。
+- `.data/snapshots-cache/pulse-sample.json`：小样输出。`pulse-full.json` 为上一版完整内容包，版本 `campus-synthetic-pulse-v2-1000`，200 用户、120 活动、1000 帖、3000 评论（2250 一级评论、750 回复）、601 好友记录（600 已接受）、1000 关注、4216 当前状态、24550 逻辑行为、15753 阅读会话。
 - `tools/content/assets.tar.gz` / `.data/assets-cache/manifest.json`：实际场景素材、主题、作者、来源页、使用条件和本地 WebP 路径。
 
-本轮 1000 帖及对应 3000 评论已完成并通过独立结构/引用/校区/时间/错误泄漏检查，已导入主库。内容覆盖证据还原后位于 `.data/content-cache/pulse-v2/acceptance-1000.json`，实际主库/公开 DTO/推荐与媒体核验为 `.data/final-pulse-seed-verification.json`。不能把这些检查扩展为真实推荐收益或尚未执行的浏览器验收。
+首轮 1000 帖及对应 3000 评论已完成并通过独立结构/引用/校区/时间/错误泄漏检查，已导入主库。内容覆盖证据还原后位于 `.data/content-cache/pulse-v2/acceptance-1000.json`，实际主库/公开 DTO/推荐与媒体核验为 `.data/final-pulse-seed-verification.json`。不能把这些检查扩展为真实推荐收益或尚未执行的浏览器验收。
 
 ## 中间资料归档与恢复
 
@@ -108,3 +108,17 @@ node tools/content/seed.ts pulse-full.json
 ## Studio 运行来源更新
 
 此前的 240 帖 seed 与 `.data/studio/snapshot.json` 作为既有资料保留，当前 Studio 不再读取它们。运行时以只读连接读取主站完整数据库，数据缺失或故障直接报错，无离线回退，无恢复写入接口。
+
+## 自然社区与图书扩展（2026-11-06）
+
+`natural-v3.json` 是新社区预置快照，保留原 Synthetic 用户及关系 ID，更新网名、帖子和讨论文案。导出只包含原预置群体，不把真实账户、私信或真实用户互动收进种子包。默认 `data:seed` 使用此文件并保留已核对的图文对应，不重新按主题随机分配媒体。生成检查点位于 `pulse-natural-v3`，最终导入数量与费用读相应 receipt，未完成批次不得按完成报告。
+
+新图清单包含 plannedFacts 与人工验图后的 verifiedFacts，只有 approved 图片用于正文绑定。原有素材不删除，AI 生活图标记 Generated，虚构社区内容标记 Synthetic。句号约束仅针对生成的社区话语，不修改用户原文、代码或真实书籍来源描述。
+
+书目单独通过 `tools/books/catalogue.tar.gz` 保存来源、书目和可解码封面，使用 `data:books:unpack` 恢复再 `data:books` 导入。`--seed-demo` 可补全 Synthetic 读者的借还/阅读事实，不生成或改写真实用户历史。详见 [图书说明](BOOKS.md)。
+
+## 当前默认图文包（v5）
+
+`natural-v3-media.json`为默认恢复入口：200个Synthetic用户、120活动、1000帖、3368评论、300个独立配图帖，人物和媒体全部可恢复。368条热点新评论及968条合成偏好状态/行为有独立cohort扩展清单，在线真人和运行产生的额外互动不写入预置资料。700本真实书目与封面另在`tools/books/catalogue.tar.gz`，演示借阅不是学校馆藏记录。
+
+最终独立空库恢复覆盖200用户/1000帖/3368评论/507媒体/700书；社区用户、正文、活动、状态和行为逐ID字段比对一致，重复导入幂等。`natural-v3.json`保留为独立旧基础版本，含历史配图分布，不能以其数量解释默认数据或实际主库。原始输出、拒稿、纠正后的r2 namespace、图片出处及未知使用条件保留；预算账本、运行凭据和私聊不进入预置包。

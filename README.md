@@ -1,16 +1,19 @@
 # Campus Pulse
 
-A campus activity and content community.
+A campus activity, reading and content community.
 
 - Poster feeds for activities and community content
 - Event registration, follows, friends, and discussions
-- Shared explainable Top-K recommendation engine
+- Explainable activity Top-K and book Top-N recommendations
+- User/item collaborative filtering, content profiles and optional shared interests
+- Private messages, notifications and a separately managed community-agent runtime
 
 ## Structure
 
 ```
 apps/web       product Nuxt app
-apps/studio    recommendation visualization app
+apps/studio    recommendation visualization and runtime control
+apps/agents    independent community worker
 packages/      contracts, domain, TypeScript recommendation engine
 tools/         content maintenance
 prisma/        SQLite schema
@@ -29,11 +32,11 @@ Node 24.x (24.15+) and pnpm 12.5.1.
 ```bash
 pnpm install --frozen-lockfile
 pnpm db:push
-pnpm dev # Web: http://127.0.0.1:3000
+pnpm dev # Web + Studio (parallel)
 ```
 
-Run `pnpm dev:studio` in another terminal for Studio at `http://127.0.0.1:3001`.
+`pnpm dev` starts Web, Studio and its independent Agent worker together. Web starts from port 3000, Studio searches sequentially from the selected Web port + 1. Occupied ports are skipped and the final URLs are printed. Use `pnpm dev --port 3100` to choose another starting Web port. `pnpm dev:web` starts only Web; `pnpm dev:studio` starts only Studio and its worker alongside an existing Web server. The worker uses the persistent shared budget and pause settings. See [Agent runtime](docs/COMMUNITY_AGENTS.md) before enabling model calls.
 
-Use `pnpm data:seed` to import bundled content before starting Web. `pnpm build` builds both apps.
+Use `pnpm data:seed` to import the final community preset (`natural-v3-media.json`) before starting Web. Restore real book metadata with `pnpm data:books:unpack` and `pnpm data:books`. Optional `pnpm data:books --seed-demo` creates recorded demonstration borrowing history. Existing user content is preserved. `pnpm build` builds both apps.
 
-See [Usage](docs/USAGE.md) and [Studio](apps/studio/README.md) for details.
+For a fresh checkout, follow [Setup and data import](docs/SETUP.md), including optional project-local model configuration. See [Usage](docs/USAGE.md) and [Studio](apps/studio/README.md) for details.

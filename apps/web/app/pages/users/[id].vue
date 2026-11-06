@@ -116,7 +116,7 @@ const friendshipLabel = computed(() =>
 <template>
 	<div v-if="data" class="profile-page">
 		<header class="profile-header">
-			<UserAvatar :name="data.user.name" large />
+			<UserAvatar :src="data.user.avatar" :name="data.user.name" large />
 			<div>
 				<h1>{{ data.user.name }}</h1>
 				<span class="profile-campus">{{ data.user.campus }}</span>
@@ -129,6 +129,13 @@ const friendshipLabel = computed(() =>
 			</div>
 		</header>
 		<div v-if="!own" class="social-actions">
+			<UButton
+				:to="`/messages?to=${data.user.id}`"
+				color="neutral"
+				variant="soft"
+				icon="i-lucide-message-circle"
+				>{{ t('ui.privateMessage') }}</UButton
+			>
 			<UButton
 				:disabled="busy"
 				:variant="data.relationship.following ? 'soft' : 'solid'"
@@ -207,9 +214,10 @@ const friendshipLabel = computed(() =>
 			<h2>{{ t('ui.requests') }}</h2>
 			<div v-for="request in data.requests" :key="request.id">
 				<NuxtLink :to="`/users/${request.requester.id}`" class="author"
-					><UserAvatar :name="request.requester.name" />{{
-						request.requester.name
-					}}</NuxtLink
+					><UserAvatar
+						:src="request.requester.avatar"
+						:name="request.requester.name"
+					/>{{ request.requester.name }}</NuxtLink
 				><UButton
 					size="sm"
 					:disabled="busy"

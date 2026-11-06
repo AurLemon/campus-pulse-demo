@@ -1,3 +1,4 @@
+import { enqueueCommunityEvent } from '../messages.ts'
 import { randomUUID } from 'node:crypto'
 import { db } from '@campus/domain/prisma'
 import { fail } from '../validation.ts'
@@ -31,7 +32,17 @@ export async function act(userId: string, mutation: Mutation, now: string) {
 				fail('NOT_FOUND', 404)
 			if (action === 'follow') {
 				const id = `follow:${userId}:${targetId}`
-				if (active)
+				if (active) {
+					await enqueueCommunityEvent(tx, {
+						id,
+						kind: 'FollowCreated',
+						actorId: userId,
+						recipientId: targetId,
+						targetType: 'user',
+						targetId: userId,
+						notificationKind: 'FOLLOW',
+						occurredAt: now,
+					})
 					await tx.follow.upsert({
 						where: {
 							followerId_followingId: {
@@ -47,7 +58,7 @@ export async function act(userId: string, mutation: Mutation, now: string) {
 						},
 						update: {},
 					})
-				else
+				} else
 					await tx.follow.deleteMany({
 						where: { followerId: userId, followingId: targetId },
 					})
@@ -125,6 +136,20 @@ export async function act(userId: string, mutation: Mutation, now: string) {
 			})
 		else
 			await tx.state.deleteMany({ where: { userId, postId, activityId, kind } })
+		if (active && (action === 'like' || action === 'favorite')) {
+			const recipientId =
+				'authorId' in target ? target.authorId : target.organizerId
+			await enqueueCommunityEvent(tx, {
+				id: `reaction:${userId}:${targetId}:${kind}`,
+				kind: 'ReactionChanged',
+				actorId: userId,
+				recipientId,
+				targetType: isActivity ? 'activity' : 'post',
+				targetId,
+				notificationKind: kind as 'LIKE' | 'FAVORITE',
+				occurredAt: now,
+			})
+		}
 		const eventKind = active
 			? kind
 			: kind === 'LIKE'

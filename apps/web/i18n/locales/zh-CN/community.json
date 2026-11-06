@@ -38,7 +38,11 @@
 			"volunteer": "志愿服务",
 			"reading": "阅读",
 			"music": "音乐",
-			"career": "职业发展"
+			"career": "职业发展",
+			"daily": "日常",
+			"gaming": "游戏",
+			"anime": "动漫",
+			"entertainment": "文娱"
 		}
 	}
 }

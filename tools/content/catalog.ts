@@ -47,6 +47,30 @@ export const topics = [
 		place: '旗山校区共享学习区',
 		voice: '朴素，不鼓吹成功，先讲踩坑',
 	},
+	{
+		tag: 'daily',
+		topic: '校园日常与生活',
+		place: '校园公共交流区',
+		voice: '随手记录身边的小事，不硬凑段子',
+	},
+	{
+		tag: 'gaming',
+		topic: '游戏与游玩交流',
+		place: '校园公共交流区',
+		voice: '按具体游戏与熟悉程度说话，不硬套黑话',
+	},
+	{
+		tag: 'anime',
+		topic: '动画漫画与角色创作',
+		place: '校园公共交流区',
+		voice: '聊具体作品和日常，不预设所有人懂梗',
+	},
+	{
+		tag: 'entertainment',
+		topic: '影视演出与追星交流',
+		place: '校园公共交流区',
+		voice: '分享具体感受与安排，尊重圈层差异',
+	},
 ]
 export const voices = [
 	'短句，喜欢先问清楚条件',
@@ -69,6 +93,14 @@ export const intents = [
 	'发起低压力交流',
 ]
 export const facets: Record<string, string[]> = {
+	daily: [
+		'食堂吃饭',
+		'宿舍收纳',
+		'赶早课',
+		'洗衣晾衣',
+		'忘带充电器',
+		'散步随拍',
+	],
 	photography: [
 		'逆光人像',
 		'夜景噪点',
@@ -217,4 +249,29 @@ export const contexts = [
 	'帮助一个完全新手',
 	'不想打扰其他人的前提',
 	'整理过去的失败记录',
+]
+
+facets.gaming = [
+	'游戏体验',
+	'游玩求助',
+	'设备与操作',
+	'联机搭子',
+	'角色喜好',
+	'版本感受',
+]
+facets.anime = [
+	'作品讨论',
+	'周边收纳',
+	'同人绘画',
+	'角色喜好',
+	'漫展准备',
+	'日常交流',
+]
+facets.entertainment = [
+	'演出安排',
+	'影视感受',
+	'追星日常',
+	'票务经历',
+	'歌单分享',
+	'日常交流',
 ]

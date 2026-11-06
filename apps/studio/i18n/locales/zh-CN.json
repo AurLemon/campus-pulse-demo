@@ -120,10 +120,18 @@
 		"volunteer": "志愿服务",
 		"reading": "阅读",
 		"music": "音乐",
-		"career": "职业发展"
+		"career": "职业发展",
+		"daily": "日常",
+		"gaming": "游戏",
+		"anime": "动漫",
+		"entertainment": "文娱"
 	},
 	"theme": "主题",
 	"system": "跟随系统",
 	"collapseSidebar": "收起侧栏",
-	"expandSidebar": "展开侧栏"
+	"expandSidebar": "展开侧栏",
+	"workspaceCommunity": "社区推荐",
+	"workspaceBooks": "图书推荐",
+	"workspaceAgents": "角色与运行",
+	"crossDomainBooks": "纳入图书阅读兴趣"
 }

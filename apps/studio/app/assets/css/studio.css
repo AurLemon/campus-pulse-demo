@@ -93,7 +93,9 @@ p {
 	min-height: 100vh;
 }
 .studio-header {
-	align-self: start;
+	align-self: stretch;
+	width: 100%;
+	min-width: 0;
 	position: sticky;
 	top: 0;
 	z-index: 30;
@@ -1494,5 +1496,275 @@ p {
 	.stage-indicator,
 	.stage-nav button {
 		transition: none;
+	}
+}
+
+/* Shared observation workspaces keep parameters, evidence and results distinct. */
+.studio-workspace {
+	display: flex;
+	flex-direction: column;
+	height: 100dvh;
+	min-height: 0;
+	overflow: hidden;
+}
+.studio-workspace > .studio-header {
+	flex-shrink: 0;
+	width: 100%;
+}
+.studio-workspace-body {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	padding: 24px;
+}
+.studio-page-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	margin-bottom: 24px;
+}
+.studio-page-heading h1 {
+	font-size: 18px;
+	font-weight: 600;
+}
+.studio-page-heading p {
+	margin-top: 6px;
+	color: var(--studio-muted);
+	font-size: 12px;
+	line-height: 1.7;
+}
+.studio-panel {
+	border: 1px solid var(--studio-line);
+	border-radius: 12px;
+	background: var(--studio-panel);
+	min-width: 0;
+	overflow: hidden;
+}
+.studio-panel-heading {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 12px;
+	padding: 16px 18px;
+	border-bottom: 1px solid var(--studio-line);
+}
+.studio-panel-heading h2,
+.studio-subheading {
+	font-size: 13px;
+	font-weight: 600;
+}
+.studio-panel-body {
+	padding: 18px;
+}
+.studio-panel-heading > span {
+	font-size: 12px;
+	color: var(--studio-muted);
+}
+.studio-empty {
+	padding: 40px 20px;
+	text-align: center;
+	font-size: 13px;
+	line-height: 1.8;
+	color: var(--studio-muted);
+}
+.studio-table-scroll {
+	overflow: auto;
+}
+.studio-data-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 12px;
+	text-align: left;
+}
+.studio-data-table th {
+	background: var(--studio-soft);
+	color: var(--studio-muted);
+	font-weight: 500;
+	white-space: nowrap;
+}
+.studio-data-table th,
+.studio-data-table td {
+	padding: 12px 16px;
+	border-bottom: 1px solid var(--studio-line);
+}
+.studio-data-table tbody tr:last-child td {
+	border-bottom: 0;
+}
+.studio-data-table td {
+	font-variant-numeric: tabular-nums;
+}
+.studio-field {
+	display: grid;
+	gap: 8px;
+	min-width: 0;
+	font-size: 12px;
+}
+@media (max-width: 1100px) {
+	.studio-header {
+		padding-inline: 20px;
+	}
+}
+@media (max-width: 800px) {
+	:root {
+		--studio-header-height: 116px;
+	}
+	.studio-header {
+		flex-wrap: wrap;
+		align-content: space-between;
+		padding: 12px 16px 0;
+		height: var(--studio-header-height);
+	}
+	.studio-brand > span {
+		font-size: 17px;
+	}
+	.studio-brand svg {
+		width: 29px;
+		height: 29px;
+	}
+	.header-meta {
+		margin-left: auto;
+		gap: 4px;
+	}
+	.studio-workspace-body {
+		padding: 20px 16px;
+	}
+	.studio-page-heading {
+		margin-bottom: 20px;
+	}
+}
+
+/* Four-stage observation workspaces share the community stage motion. */
+.workspace-stage-nav {
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	flex-shrink: 0;
+	width: 100%;
+}
+.workspace-stage-nav .stage-indicator {
+	width: 25%;
+}
+.studio-controls-scroll,
+.books-sidebar {
+	scrollbar-width: none;
+}
+.studio-controls-scroll::-webkit-scrollbar,
+.books-sidebar::-webkit-scrollbar {
+	display: none;
+}
+@media (max-width: 800px) {
+	.workspace-stage-nav button {
+		padding: 16px 4px;
+		font-size: 12px;
+	}
+	.workspace-stage-nav button > span {
+		font-size: 10px;
+		margin-right: 4px;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.workspace-stage-nav .stage-indicator {
+		transition: none;
+	}
+}
+
+.studio-reroll {
+	align-self: center;
+	display: inline-flex;
+	align-items: center;
+	min-height: 32px;
+	margin-block: 0;
+}
+
+/* Keep the header mounted while each workspace region changes independently. */
+.studio-app-workspace {
+	display: flex;
+	flex-direction: column;
+	height: 100dvh;
+	min-height: 0;
+	overflow: hidden;
+}
+.studio-app-workspace > .studio-header {
+	flex-shrink: 0;
+}
+.studio-app-workspace > .studio-workbench,
+.studio-app-workspace > .studio-workspace {
+	flex: 1;
+	height: auto;
+	min-height: 0;
+}
+.studio-route-enter-active .studio-controls-heading,
+.studio-route-enter-active .studio-controls-scroll,
+.studio-route-enter-active .stage-nav,
+.studio-route-enter-active .studio-content,
+.studio-route-enter-active .books-content,
+.studio-route-enter-active .agents-content,
+.studio-route-leave-active .studio-controls-heading,
+.studio-route-leave-active .studio-controls-scroll,
+.studio-route-leave-active .stage-nav,
+.studio-route-leave-active .studio-content,
+.studio-route-leave-active .books-content,
+.studio-route-leave-active .agents-content {
+	transition:
+		opacity 160ms ease,
+		transform 180ms ease;
+}
+.studio-route-enter-active .studio-content,
+.studio-route-enter-active .books-content,
+.studio-route-enter-active .agents-content {
+	transition-delay: 35ms;
+}
+.studio-route-leave-active .studio-controls-heading,
+.studio-route-leave-active .studio-controls-scroll,
+.studio-route-leave-active .stage-nav,
+.studio-route-leave-active .studio-content,
+.studio-route-leave-active .books-content,
+.studio-route-leave-active .agents-content {
+	transition-duration: 100ms;
+}
+.studio-route-enter-from .studio-controls-heading,
+.studio-route-enter-from .studio-controls-scroll,
+.studio-route-leave-to .studio-controls-heading,
+.studio-route-leave-to .studio-controls-scroll {
+	opacity: 0;
+	transform: translateX(-6px);
+}
+.studio-route-enter-from .stage-nav,
+.studio-route-leave-to .stage-nav {
+	opacity: 0;
+	transform: translateY(-4px);
+}
+.studio-route-enter-from .studio-content,
+.studio-route-enter-from .books-content,
+.studio-route-enter-from .agents-content {
+	opacity: 0;
+	transform: translateY(7px);
+}
+.studio-route-leave-to .studio-content,
+.studio-route-leave-to .books-content,
+.studio-route-leave-to .agents-content {
+	opacity: 0;
+	transform: translateY(-4px);
+}
+@media (prefers-reduced-motion: reduce) {
+	.studio-route-enter-active
+		:is(
+			.studio-controls-heading,
+			.studio-controls-scroll,
+			.stage-nav,
+			.studio-content,
+			.books-content,
+			.agents-content
+		),
+	.studio-route-leave-active
+		:is(
+			.studio-controls-heading,
+			.studio-controls-scroll,
+			.stage-nav,
+			.studio-content,
+			.books-content,
+			.agents-content
+		) {
+		transition: none !important;
+		transform: none !important;
 	}
 }

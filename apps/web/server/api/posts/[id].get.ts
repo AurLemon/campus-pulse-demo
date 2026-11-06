@@ -25,6 +25,12 @@ export default api(async (event) => {
 			comments.map(async ({ source: _source, deletedAt, ...c }) => ({
 				...c,
 				body: deletedAt ? '' : c.body,
+				mediaIds: deletedAt ? [] : JSON.parse(c.mediaIds),
+				media: deletedAt
+					? []
+					: await db.mediaAsset.findMany({
+							where: { id: { in: JSON.parse(c.mediaIds) } },
+						}),
 				deleted: !!deletedAt,
 				author: publicUser(
 					await db.user.findUniqueOrThrow({ where: { id: c.authorId } }),

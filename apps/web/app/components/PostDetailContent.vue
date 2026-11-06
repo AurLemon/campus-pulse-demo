@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { PostDetail } from '@campus/contracts'
+import type { MediaAsset, PostDetail } from '@campus/contracts'
 const props = withDefaults(
 	defineProps<{ postId: string; embedded?: boolean }>(),
 	{ embedded: false },
@@ -61,6 +61,9 @@ const draft = computed({
 	busy = ref(false),
 	message = ref(''),
 	composerFocused = ref(false)
+const commentMedia = ref<MediaAsset[]>([])
+const uploadingComment = ref(false)
+const operationId = ref('')
 const replyName = computed(
 	() =>
 		data.value?.comments.find((comment) => comment.id === replyTo.value)?.author
@@ -70,6 +73,7 @@ const composerExpanded = computed(
 	() =>
 		composerFocused.value ||
 		!!draft.value.trim() ||
+		!!commentMedia.value.length ||
 		!!replyTo.value ||
 		busy.value,
 )
@@ -104,11 +108,17 @@ function blurComposer() {
 const { fields, clear, capture } = useFieldErrors(commentFormPrefix)
 useReadingSession({ postId: String(props.postId) })
 async function submit() {
-	if (busy.value || !draft.value.trim()) return
+	if (
+		busy.value ||
+		uploadingComment.value ||
+		(!draft.value.trim() && !commentMedia.value.length)
+	)
+		return
 	if (!user.value) {
 		void openAuth()
 		return
 	}
+	operationId.value ||= crypto.randomUUID()
 	const submittedKey = key.value
 	const submittedBody = draft.value
 	const submittedParent = replyTo.value
@@ -123,8 +133,12 @@ async function submit() {
 				postId: props.postId,
 				body: submittedBody,
 				parentId: submittedParent,
+				mediaIds: commentMedia.value.map((asset) => asset.id),
+				operationId: operationId.value,
 			},
 		})
+		commentMedia.value = []
+		operationId.value = ''
 		if (drafts.value[submittedKey] === submittedBody)
 			drafts.value[submittedKey] = ''
 		if (disposed) return
@@ -201,6 +215,8 @@ watch(
 		replyTo.value = null
 		composerFocused.value = false
 		message.value = ''
+		commentMedia.value = []
+		operationId.value = ''
 		clear()
 		if (
 			pending &&
@@ -208,6 +224,13 @@ watch(
 		)
 			await chooseReply(pending)
 	},
+)
+watch(
+	[draft, commentMedia, replyTo],
+	() => {
+		if (!busy.value) operationId.value = ''
+	},
+	{ deep: true },
 )
 </script>
 <template>
@@ -234,9 +257,10 @@ watch(
 				<div class="detail-copy">
 					<div class="byline">
 						<NuxtLink :to="`/users/${data.post.author.id}`" class="author"
-							><UserAvatar :name="data.post.author.name" />{{
-								data.post.author.name
-							}}</NuxtLink
+							><UserAvatar
+								:src="data.post.author.avatar"
+								:name="data.post.author.name"
+							/>{{ data.post.author.name }}</NuxtLink
 						><time>{{ date(data.post.createdAt) }}</time>
 					</div>
 					<h1>{{ data.post.title }}</h1>
@@ -277,9 +301,10 @@ watch(
 					</h2>
 					<div class="post-comments__composer-row">
 						<span class="post-comments__composer-avatar" aria-hidden="true"
-							><UserAvatar v-if="user" :name="user.name" /><UIcon
-								v-else
-								name="i-lucide-user-round"
+							><UserAvatar
+								v-if="user"
+								:src="user.avatar"
+								:name="user.name" /><UIcon v-else name="i-lucide-user-round"
 						/></span>
 						<form
 							v-if="user"
@@ -304,7 +329,6 @@ watch(
 								:label="t('ui.comment')"
 								:error="fields.body"
 								:ui="{ label: 'sr-only' }"
-								required
 								><UTextarea
 									:id="commentInputId"
 									v-model="draft"
@@ -314,7 +338,6 @@ watch(
 									autoresize
 									:maxlength="2000"
 									:disabled="busy"
-									required
 									:placeholder="composerPlaceholder"
 									@focus="focusComposer"
 									@blur="blurComposer"
@@ -326,14 +349,26 @@ watch(
 							>
 								{{ message }}
 							</p>
-							<div v-if="composerExpanded" class="post-comments__actions">
+							<MessageMediaPicker
+								v-model="commentMedia"
+								:disabled="busy"
+								@busy="uploadingComment = $event"
+							/>
+							<div
+								v-if="composerExpanded || commentMedia.length"
+								class="post-comments__actions"
+							>
 								<UButton
 									type="submit"
 									color="neutral"
 									variant="soft"
 									size="sm"
 									:loading="busy"
-									:disabled="busy || !draft.trim()"
+									:disabled="
+										busy ||
+										uploadingComment ||
+										(!draft.trim() && !commentMedia.length)
+									"
 									>{{ t('ui.send') }}</UButton
 								>
 							</div>

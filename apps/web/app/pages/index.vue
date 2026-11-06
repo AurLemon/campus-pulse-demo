@@ -421,12 +421,21 @@ watch(
 onBeforeRouteUpdate(() => {
 	captureScroll()
 })
+// A canonical link may begin leaving before the query modal replaces its navigation.
+// Only a completed navigation away should keep automatic loading suspended.
+const removeNavigationSettled = router.afterEach((to, _from, failure) => {
+	if (failure || to.path === '/') {
+		leaving = false
+		if (import.meta.client) void nextTick(scheduleMore)
+	}
+})
 onBeforeRouteLeave(() => {
 	if (!scrollObserved) recordScroll()
 	persist()
 	leaving = true
 })
 onBeforeUnmount(() => {
+	removeNavigationSettled()
 	window.removeEventListener('scroll', recordScroll)
 	document.removeEventListener('visibilitychange', scheduleMore)
 	window.removeEventListener('focus', scheduleMore)

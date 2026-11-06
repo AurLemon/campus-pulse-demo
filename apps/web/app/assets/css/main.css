@@ -1580,7 +1580,7 @@ html:has(.discovery-page),
 		left: 0;
 		right: 0;
 		display: grid;
-		grid-template-columns: repeat(4, 1fr);
+		grid-template-columns: repeat(5, minmax(0, 1fr));
 		padding: 8px 15px calc(8px + env(safe-area-inset-bottom));
 		background: color-mix(in srgb, var(--surface) 96%, transparent);
 		border-top: 1px solid var(--line);
@@ -2912,6 +2912,52 @@ html:has(.discovery-page),
 	}
 	.page-enter-from,
 	.page-leave-to {
+		transform: none;
+	}
+}
+
+/* Keep both column tracks present so route changes can interpolate. */
+@media (min-width: 1400px) {
+	.campus-shell {
+		grid-template-columns: var(--sidebar-width) minmax(0, 1fr) 0px;
+		transition: grid-template-columns 220ms ease;
+	}
+	.community-rail-slot {
+		min-width: 0;
+		position: sticky;
+		top: 0;
+		height: 100dvh;
+		overflow: hidden;
+		opacity: 0;
+		transform: translateX(12px);
+		transition:
+			opacity 180ms ease,
+			transform 220ms ease;
+		pointer-events: none;
+	}
+	.community-rail-slot > .community-rail {
+		width: 282px;
+	}
+	.shell-with-rail .community-rail-slot {
+		opacity: 1;
+		transform: translateX(0);
+		pointer-events: auto;
+	}
+}
+@media (min-width: 1700px) {
+	.community-rail-slot > .community-rail {
+		width: 292px;
+	}
+}
+@media (max-width: 1399px) {
+	.community-rail-slot {
+		display: none;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.campus-shell,
+	.community-rail-slot {
+		transition: none;
 		transform: none;
 	}
 }

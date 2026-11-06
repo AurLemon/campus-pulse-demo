@@ -46,6 +46,7 @@ export interface Post extends PosterOptions {
 	source: ContentSource
 }
 export interface Comment {
+	mediaIds?: string[]
 	id: string
 	postId: string
 	authorId: string
@@ -210,6 +211,7 @@ export interface PostView extends Omit<Post, 'source'> {
 	reason?: string
 }
 export interface CommentView extends Omit<Comment, 'source'> {
+	media: MediaAsset[]
 	deleted: boolean
 	author: PublicUser
 }
@@ -295,3 +297,5 @@ export interface StudioLoginLink {
 	url: string
 	expiresAt: string
 }
+
+export { defaultUserAvatar } from './avatars.ts'

@@ -106,10 +106,14 @@ export async function importSnapshot(snapshot: Snapshot, reset = false) {
 				})),
 			})
 			await tx.comment.createMany({
-				data: snapshot.comments.filter((c) => !c.parentId),
+				data: snapshot.comments
+					.filter((c) => !c.parentId)
+					.map((c) => ({ ...c, mediaIds: JSON.stringify(c.mediaIds ?? []) })),
 			})
 			await tx.comment.createMany({
-				data: snapshot.comments.filter((c) => c.parentId),
+				data: snapshot.comments
+					.filter((c) => c.parentId)
+					.map((c) => ({ ...c, mediaIds: JSON.stringify(c.mediaIds ?? []) })),
 			})
 			await tx.friendship.createMany({ data: snapshot.friendships })
 			await tx.follow.createMany({ data: snapshot.follows })
@@ -501,10 +505,14 @@ export async function importContentBatch(
 				})),
 			})
 			await tx.comment.createMany({
-				data: snapshot.comments.filter((c) => !c.parentId),
+				data: snapshot.comments
+					.filter((c) => !c.parentId)
+					.map((c) => ({ ...c, mediaIds: JSON.stringify(c.mediaIds ?? []) })),
 			})
 			await tx.comment.createMany({
-				data: snapshot.comments.filter((c) => c.parentId),
+				data: snapshot.comments
+					.filter((c) => c.parentId)
+					.map((c) => ({ ...c, mediaIds: JSON.stringify(c.mediaIds ?? []) })),
 			})
 			await tx.friendship.createMany({ data: snapshot.friendships })
 			await tx.follow.createMany({ data: snapshot.follows })

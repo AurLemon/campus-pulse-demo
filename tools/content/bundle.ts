@@ -46,8 +46,10 @@ const projectRoot = fileURLToPath(new URL('../../', import.meta.url))
 const stateName = '.bundle-state.json'
 const maxFileBytes = (options: ContentBundleOptions) =>
 	(options.kind === 'snapshots' ? 32 : 8) * 1024 * 1024
-const maxTotalBytes = 128 * 1024 * 1024
-const maxCompressedBytes = 64 * 1024 * 1024
+const maxTotalBytes = (options: ContentBundleOptions) =>
+	(options.kind === 'assets' ? 256 : 128) * 1024 * 1024
+const maxCompressedBytes = (options: ContentBundleOptions) =>
+	(options.kind === 'assets' ? 128 : 64) * 1024 * 1024
 const maxFiles = 10000
 const digest = (bytes: Buffer) =>
 	createHash('sha256').update(bytes).digest('hex')
@@ -209,7 +211,8 @@ async function scan(
 			const bytes = await readFile(full)
 			if (path.endsWith('.json')) JSON.parse(bytes.toString('utf8'))
 			total += bytes.length
-			if (total > maxTotalBytes) throw new Error('CONTENT_BUNDLE_LIMIT')
+			if (total > maxTotalBytes(options))
+				throw new Error('CONTENT_BUNDLE_LIMIT')
 			files.set(path, bytes)
 		}
 	}
@@ -235,12 +238,14 @@ async function readBundle(
 	path: string,
 	options: ContentBundleOptions,
 ): Promise<VerifiedBundle> {
-	if ((await stat(path)).size > maxCompressedBytes)
+	if ((await stat(path)).size > maxCompressedBytes(options))
 		throw new Error('CONTENT_BUNDLE_LIMIT')
 	const compressed = await readFile(path)
 	if (compressed[0] !== 0x1f || compressed[1] !== 0x8b)
 		throw new Error('CONTENT_BUNDLE_NOT_GZIP')
-	const plain = gunzipSync(compressed, { maxOutputLength: maxTotalBytes })
+	const plain = gunzipSync(compressed, {
+		maxOutputLength: maxTotalBytes(options),
+	})
 	const files = new Map<string, Buffer>()
 	const folded = new Set<string>()
 	let failure: string | undefined

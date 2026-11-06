@@ -152,6 +152,9 @@
 		"studioLoginInvalid": "登录链接已失效，请回到 Studio 重新选择账户。",
 		"studioLoginReturn": "返回首页",
 		"feedContinue": "还有内容，继续向下浏览",
-		"feedFinished": "已经看完了"
+		"feedFinished": "已经看完了",
+		"books": "图书",
+		"messages": "消息",
+		"privateMessage": "发私信"
 	}
 }

@@ -9,5 +9,13 @@
 		"types": ["node"],
 		"allowImportingTsExtensions": true
 	},
-	"include": ["../tools/**/*.ts", "../packages/**/*.ts", "database.ts"]
+	"include": [
+		"../tools/**/*.ts",
+		"../packages/**/*.ts",
+		"database.ts",
+		"dev.ts",
+		"dev-ports.ts",
+		"../apps/agents/**/*.ts",
+		"studio-with-agents.ts"
+	]
 }

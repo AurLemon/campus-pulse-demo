@@ -1,12 +1,14 @@
-# 内容任务与全局 Pi
+# 内容任务与 Pi ModelRuntime
 
 ## 边界
 
 新增、批量生成和实质润色内容默认通过 DS，工程 Agent 负责输入约束、审样、校验、集成与最终验收。真实私人页面、用户昵称、帖子与图片不发送给第三方模型，只传抽象表达规律和已授权的虚构内容上下文。
 
-`tools/agents/run.ts` 通过全局 Pi 的 ModelRuntime SDK 执行无工具写作任务。它不再通过 Pi CLI print 会话生成内容，不加载仓库、扩展、MCP 或文件工具。`--read-only` 会被明确拒绝，需要的上下文由调用方先整理。
+`tools/agents/run.ts` 通过 Pi 的 ModelRuntime SDK 执行无工具写作任务。它不再通过 Pi CLI print 会话生成内容，不加载仓库、扩展、MCP 或文件工具。`--read-only` 会被明确拒绝，需要的上下文由调用方先整理。
 
-Pi 与模型配置只存在于用户目录，不安装到产品运行依赖。配置在 `~/.pi/agent/`，provider 为 campus-hub，默认模型 deepseek-v4.1-flash-1017。SDK 按显式目录、PATH shim 或 `pnpm root -g` 定位，不修改全局 provider。
+初次配置按 [初始化指南](SETUP.md#4-可选配置社区-agent)。主站和推荐算法无需模型密钥。SDK 优先采用显式根目录与可用的全局 Pi 安装，没有全局 SDK 时使用项目锁定的 `@earendil-works/pi-coding-agent` 依赖，不要求另装全局 CLI。provider 为 campus-hub，当前默认模型和预算定价仅支持 deepseek-v4.1-flash-1017，不支持任意模型替换。
+
+运行器读取根 `.env`，使用 Node `loadEnvFile` 只补全尚未设置的环境变量。模型访问优先采用环境中的 `CAMPUS_AGENT_BASE_URL` 与 `CAMPUS_AGENT_API_KEY` 这一对配置，否则按显式 `PI_CODING_AGENT_DIR`、项目 `.pi/agent`、全局 `~/.pi/agent` 定位 `models.json`。不修改全局 provider，本地凭据与配置不进入 Git。
 
 ## 调用
 
@@ -17,15 +19,18 @@ pnpm agent:probe
 
 `agent:run` 无 `--run` 时只打印用法。probe 无 `--run` 时只做计划，实际探测需另行明确。上述运行器本身没有累计费用封顶，付费写作必须通过 `tools/content/budget.ts` 的 `runWritingBatch` 预留与记账，不直接批量调用 runner 绕开账本。
 
-| 环境变量                  | 作用                                      |
-| ------------------------- | ----------------------------------------- |
-| `CAMPUS_AGENT_CWD`        | 唯一任务目录，并发任务不得复用            |
-| `CAMPUS_AGENT_MODEL`      | 已配置的目标模型，计价必须匹配            |
-| `CAMPUS_AGENT_API`        | openai-completions 或 openai-responses    |
-| `CAMPUS_AGENT_MAX_TOKENS` | 请求级上限，默认 16384，限制在 1024–32768 |
-| `CAMPUS_AGENT_TIMEOUT_MS` | 默认 180000，限制在 10000–300000          |
-| `PI_CODING_AGENT_DIR`     | 已授权的全局配置目录                      |
-| `CAMPUS_PI_SDK_ROOT`      | 显式指定全局 SDK 的 node_modules 根       |
+| 环境变量                  | 作用                                         |
+| ------------------------- | -------------------------------------------- |
+| `CAMPUS_AGENT_CWD`        | 唯一任务目录，并发任务不得复用               |
+| `CAMPUS_AGENT_BASE_URL`   | 兼容模型渠道 API 地址，与 API Key 成对配置   |
+| `CAMPUS_AGENT_API_KEY`    | 本机私密 API Key，不打印、不提交             |
+| `CAMPUS_AGENT_PROXY_URL`  | 可选进程代理地址，默认不强制代理             |
+| `CAMPUS_AGENT_MODEL`      | 当前仅 deepseek-v4.1-flash-1017 的计价受支持 |
+| `CAMPUS_AGENT_API`        | openai-completions 或 openai-responses       |
+| `CAMPUS_AGENT_MAX_TOKENS` | 请求级上限，默认 16384，限制在 128–32768     |
+| `CAMPUS_AGENT_TIMEOUT_MS` | 默认 180000，限制在 10000–300000             |
+| `PI_CODING_AGENT_DIR`     | 显式 Pi 配置目录，优先于项目与全局目录       |
+| `CAMPUS_PI_SDK_ROOT`      | 显式指定 SDK 的 node_modules 根              |
 
 runner 默认协议为 Chat/openai-completions，当前 refresh-community 的写作首尝试显式选 Responses，后备尝试 Chat。不能据此说所有请求默认 Responses。runner 在单次请求内复制模型配置并提高 maxTokens，不回写 models.json。Chat 请求设置 thinking.disabled 与 JSON response_format，Responses 设置 reasoning.effort=none 与 JSON text.format。上游可能忽略这些要求，实际仍可能产生 thinking，不能仅凭选项声称思考已关闭，也不能把 token 参数当作费用硬上限。
 
@@ -51,4 +56,6 @@ runner 默认协议为 Chat/openai-completions，当前 refresh-community 的写
 
 模型凭据不进入 Git、浏览器、工单正文、公开日志或产品部署。环境引用只解析变量，不执行配置中的 shell 命令。生成任务从仓库根运行，始终指向同一 `.data` 账本。
 
-网络需要代理时仅在任务进程使用已有设置，不改系统配置。Node 原生 fetch 不会仅因存在 HTTP_PROXY/HTTPS_PROXY 就自动使用代理。当前 runner 检测到这些变量且尚未 bootstrap 时，仅将本工具子进程以 `--use-env-proxy` 重新启动一次，通过 CAMPUS_AGENT_PROXY_BOOTSTRAPPED 防止递归，继承既有环境，不硬编码代理端口。无需修改父 CLI、NODE_OPTIONS、全局 Pi 或系统代理。SDK 最终使用 Node 原生 fetch，request-meta 的 processProxyEnabled 记录启动标记或 NODE_USE_ENV_PROXY=1。链路改善不能证明所有上游流中断都由本地代理引起。目标机器需要自行安装全局 Pi，macOS 之外的 SDK 定位与原生依赖仍需实际核验。
+网络需要代理时可设置 `CAMPUS_AGENT_PROXY_URL`，仅作用于任务进程，不改系统网络或全局 Pi 配置，默认不强制代理。Node 原生 fetch 不会仅因存在 HTTP_PROXY/HTTPS_PROXY 就自动使用代理，运行器在需要时以 `--use-env-proxy` 重新启动本工具子进程一次，保留递归保护与代理状态元数据，不硬编码本机端口。链路改善不能证明所有上游流中断都由本地代理引起。
+
+`pnpm agents:doctor` 检查本机配置、SDK 和网络可达性，不调用模型。部分渠道未实现 models endpoint，缺少该接口不等于模型不可用。`pnpm agents:check` 查看本地运行库和项目预算，不能据此判断供应商余额。初始化与只读检查不包含 `agent:probe --run`、单步触发或开始自动调度，实际付费调用需使用者明确要求，并遵守现有账本保护。

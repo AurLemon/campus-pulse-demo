@@ -38,3 +38,6 @@ screenshots/
 data/raw/
 
 generated/
+
+# Project-local Pi configuration may contain provider credentials
+.pi/

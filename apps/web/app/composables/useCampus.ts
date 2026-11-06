@@ -162,6 +162,10 @@ export function useTopics() {
 		'reading',
 		'music',
 		'career',
+		'daily',
+		'gaming',
+		'anime',
+		'entertainment',
 	]
 	const topicLabel = (id: string) =>
 		te(`community.topics.${id}`) ? t(`community.topics.${id}`) : id

@@ -44,7 +44,7 @@ export async function readSnapshot(
 			tags: JSON.parse(p.tags),
 			mediaIds: JSON.parse(p.mediaIds),
 		})),
-		comments,
+		comments: comments.map((c) => ({ ...c, mediaIds: JSON.parse(c.mediaIds) })),
 		friendships,
 		follows,
 		states,

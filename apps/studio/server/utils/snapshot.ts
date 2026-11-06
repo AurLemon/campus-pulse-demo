@@ -34,10 +34,14 @@ export async function readStudioRevision() {
 		})
 	}
 }
-export async function readStudioSnapshot() {
+export async function readStudioSnapshot(crossDomain = true) {
 	try {
 		const revision = await readStudioRevision()
-		const snapshot = await loadReadOnlySnapshot(studioDatabaseUrl())
+		const snapshot = await loadReadOnlySnapshot(
+			studioDatabaseUrl(),
+			new Date().toISOString(),
+			{ crossDomain },
+		)
 		if (
 			!snapshot.users.length ||
 			(!snapshot.posts.length && !snapshot.activities.length)

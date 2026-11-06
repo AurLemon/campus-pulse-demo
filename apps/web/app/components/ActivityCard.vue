@@ -46,9 +46,10 @@ const { t } = useI18n(),
 			</div>
 			<div class="card-footer">
 				<NuxtLink :to="`/users/${activity.organizer.id}`" class="author"
-					><UserAvatar :name="activity.organizer.name" /><span>{{
-						activity.organizer.name
-					}}</span></NuxtLink
+					><UserAvatar
+						:src="activity.organizer.avatar"
+						:name="activity.organizer.name"
+					/><span>{{ activity.organizer.name }}</span></NuxtLink
 				><span class="small muted">{{
 					t('ui.spots', {
 						count: activity.stats.registrations,

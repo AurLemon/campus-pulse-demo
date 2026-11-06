@@ -61,9 +61,10 @@ useReadingSession({ activityId: String(props.activityId) })
 					}}</span>
 					<h1>{{ data.activity.title }}</h1>
 					<NuxtLink :to="`/users/${data.activity.organizer.id}`" class="author"
-						><UserAvatar :name="data.activity.organizer.name" />{{
-							data.activity.organizer.name
-						}}
+						><UserAvatar
+							:src="data.activity.organizer.avatar"
+							:name="data.activity.organizer.name"
+						/>{{ data.activity.organizer.name }}
 						<span class="muted">{{ t('ui.organizer') }}</span></NuxtLink
 					>
 					<dl class="activity-facts">
