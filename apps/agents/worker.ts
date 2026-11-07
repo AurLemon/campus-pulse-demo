@@ -12,10 +12,16 @@ import {
 	MAX_CONCURRENCY,
 	completedDecisions,
 	PROTECTED_PAUSE,
+	recordJobFailure,
 } from './store.ts'
 import { request } from './client.ts'
 import { syncPersonas } from './personas.ts'
 import { buildAgentPrompt } from './prompt.ts'
+import { MAX_JOB_RETRIES, writingBatchId } from './retry-policy.ts'
+import {
+	sweepEngagementIntent,
+	type SweepActivityContext,
+} from './activity-policy.ts'
 import {
 	runWritingBatch,
 	readTaskBudget,
@@ -68,9 +74,15 @@ process.on('disconnect', stop)
 configure('workerPid', process.pid)
 store
 	.prepare(
-		"UPDATE jobs SET status=CASE WHEN decision IS NULL THEN 'failed' ELSE 'ready' END,error=CASE WHEN decision IS NULL THEN 'INTERRUPTED_USAGE_RESERVED' ELSE NULL END WHERE status='running'",
+		`UPDATE jobs SET status=CASE WHEN retryCount<? THEN 'ready' ELSE 'failed' END,
+	error='INTERRUPTED_USAGE_RESERVED',retryCount=MIN(retryCount+1,?),nextAttemptAt=?,updatedAt=? WHERE status='running'`,
 	)
-	.run()
+	.run(
+		MAX_JOB_RETRIES,
+		MAX_JOB_RETRIES,
+		new Date().toISOString(),
+		new Date().toISOString(),
+	)
 let nextSignals = 0
 let nextRun = 0,
 	synchronized = false
@@ -115,15 +127,17 @@ async function runJob(
 	let decision: AgentDecision
 	if (decisionText) decision = JSON.parse(decisionText) as AgentDecision
 	else {
-		const context = await request<{
-			posts: Array<{ id: string; title: string }>
-			replyOpportunity?: { mayReply: boolean }
-			books: Array<{ id: string; title: string }>
-			privateThreads: Array<{
-				conversationId: string
-				messages: { nextSequence: number }
-			}>
-		}>('context', {
+		const context = await request<
+			SweepActivityContext & {
+				posts: Array<{ id: string; title: string }>
+				replyOpportunity?: { mayReply: boolean }
+				books: Array<{ id: string; title: string }>
+				privateThreads: Array<{
+					conversationId: string
+					messages: { nextSequence: number }
+				}>
+			}
+		>('context', {
 			actorId: actor.actorId,
 			operationId: id,
 			trigger: requestTrigger,
@@ -132,39 +146,60 @@ async function runJob(
 			conversationId: thread.conversationId,
 			sequence: thread.messages.nextSequence,
 		}))
-		const memoryRows = store
-			.prepare(
-				'SELECT body FROM memories WHERE actorId=? ORDER BY id DESC LIMIT 12',
-			)
-			.all(actor.actorId) as Array<{ body: string }>
-		const memories = memoryRows
-			.flatMap((row) => {
-				try {
-					const memory = JSON.parse(row.body) as {
-						action: string
-						targetId?: string
-						body?: string
-					}
-					if (trigger.kind === 'direct-message')
-						return memory.action === 'message' &&
-							memory.targetId === trigger.conversationId
-							? [memory]
-							: []
-					return memory.action === 'message' ? [] : [memory]
-				} catch {
-					return []
-				}
-			})
-			.slice(0, 6)
+		const memoryQuery =
+			trigger.kind === 'direct-message'
+				? store.prepare(
+						"SELECT body FROM memories WHERE actorId=? AND json_valid(body) AND json_extract(body,'$.action')='message' AND json_extract(body,'$.targetId')=? ORDER BY id DESC LIMIT 12",
+					)
+				: store.prepare(
+						"SELECT body FROM memories WHERE actorId=? AND json_valid(body) AND json_extract(body,'$.action')<>'message' ORDER BY id DESC LIMIT 12",
+					)
+		const memoryRows = (
+			trigger.kind === 'direct-message'
+				? memoryQuery.all(actor.actorId, trigger.conversationId)
+				: memoryQuery.all(actor.actorId)
+		) as Array<{ body: string }>
+		const memories = memoryRows.reverse().map(
+			(row) =>
+				JSON.parse(row.body) as {
+					action: string
+					targetId?: string
+					body?: string
+				},
+		)
 
-		const prompt = buildAgentPrompt(actor, context, memories, requestTrigger)
+		const retry = store
+			.prepare('SELECT retryCount,modelBatchId,error FROM jobs WHERE id=?')
+			.get(id) as {
+			retryCount: number
+			modelBatchId: string | null
+			error: string | null
+		}
+		const prompt = buildAgentPrompt(
+			actor,
+			{
+				...context,
+				engagementIntent:
+					trigger.kind === 'sweep'
+						? sweepEngagementIntent(actor.actorId, id, context)
+						: undefined,
+				previousFailure: retry.error
+					? (retry.error.match(/PRODUCT_\d+:([A-Z_]+)/)?.[1] ??
+						'PREVIOUS_ATTEMPT_FAILED')
+					: undefined,
+			},
+			memories,
+			requestTrigger,
+		)
+		const batchId = retry.modelBatchId ?? writingBatchId(id, retry.retryCount)
+		store.prepare('UPDATE jobs SET modelBatchId=? WHERE id=?').run(batchId, id)
 		const noTarget =
 			(trigger.kind === 'direct-message' && !context.privateThreads.length) ||
 			(trigger.kind === 'comment' &&
 				(!context.posts.length || context.replyOpportunity?.mayReply === false))
 		const output = noTarget
 			? JSON.stringify({ action: 'skip' })
-			: await runWritingBatch(`runtime-${id}`, prompt, {
+			: await runWritingBatch(batchId, prompt, {
 					maxTokens:
 						trigger.kind === 'direct-message'
 							? 768
@@ -175,9 +210,13 @@ async function runJob(
 									: 2048,
 					timeoutMs: 90000,
 				})
-		decision = JSON.parse(
-			output.replace(/^```(?:json)?\s*|\s*```$/g, ''),
-		) as AgentDecision
+		try {
+			decision = JSON.parse(
+				output.replace(/^```(?:json)?\s*|\s*```$/g, ''),
+			) as AgentDecision
+		} catch {
+			throw new Error('INVALID_MODEL_RESULT:JSON_PARSE_FAILED')
+		}
 		store
 			.prepare(
 				'UPDATE jobs SET decision=?,action=?,status=?,readAcknowledgements=? WHERE id=?',
@@ -219,7 +258,7 @@ async function runJob(
 	const now = new Date().toISOString()
 	store
 		.prepare(
-			"UPDATE jobs SET status='complete',result=?,updatedAt=?,error=NULL WHERE id=?",
+			"UPDATE jobs SET status='complete',result=?,updatedAt=?,error=NULL,nextAttemptAt=NULL WHERE id=?",
 		)
 		.run(JSON.stringify(result), now, id)
 	store
@@ -390,10 +429,22 @@ try {
 			continue
 		}
 		const everyone = personas()
+		const waitingActors = new Set(
+			(
+				store
+					.prepare(
+						"SELECT DISTINCT actorId FROM jobs WHERE status IN ('ready','queued')",
+					)
+					.all() as Array<{ actorId: string }>
+			).map((job) => job.actorId),
+		)
 		const all = everyone
 			.slice(0, setting('actorLimit', everyone.length))
 			.filter(
-				(p) => !active.has(p.actorId) && !humanControlledActors.has(p.actorId),
+				(p) =>
+					!active.has(p.actorId) &&
+					!humanControlledActors.has(p.actorId) &&
+					!waitingActors.has(p.actorId),
 			)
 		interface PendingJob {
 			id: string
@@ -404,9 +455,12 @@ try {
 		}
 		const pendingRows = store
 			.prepare(
-				"SELECT id,actorId,decision,readAcknowledgements,trigger FROM jobs WHERE status IN ('ready','queued') AND actorId NOT IN (SELECT actorId FROM jobs WHERE status='running') AND (status='queued' OR updatedAt<?) ORDER BY CASE status WHEN 'ready' THEN 0 ELSE 1 END,createdAt",
+				"SELECT id,actorId,decision,readAcknowledgements,trigger FROM jobs WHERE status IN ('ready','queued') AND actorId NOT IN (SELECT actorId FROM jobs WHERE status='running') AND (nextAttemptAt IS NULL OR nextAttemptAt<=?) AND (status='queued' OR nextAttemptAt IS NOT NULL OR updatedAt<?) ORDER BY CASE status WHEN 'ready' THEN 0 ELSE 1 END,createdAt",
 			)
-			.all(new Date(Date.now() - 10000).toISOString()) as PendingJob[]
+			.all(
+				new Date().toISOString(),
+				new Date(Date.now() - 10000).toISOString(),
+			) as PendingJob[]
 		const pending = pendingRows.find((job) => {
 			if (active.has(job.actorId) || humanControlledActors.has(job.actorId))
 				return false
@@ -428,7 +482,7 @@ try {
 		const signalRows = setting('enabled', false)
 			? (store
 					.prepare(
-						"SELECT signals.*,personas.lastRunAt FROM signals JOIN personas ON personas.id=signals.actorId WHERE signals.actorId NOT IN (SELECT actorId FROM jobs WHERE status='running') ORDER BY signals.createdAt",
+						"SELECT signals.*,personas.lastRunAt FROM signals JOIN personas ON personas.id=signals.actorId WHERE signals.actorId NOT IN (SELECT actorId FROM jobs WHERE status IN ('running','ready','queued')) ORDER BY signals.createdAt",
 					)
 					.all() as SignalRow[])
 			: []
@@ -531,7 +585,8 @@ try {
 			(wake?.trigger.kind === 'direct-message' ? undefined : pending)
 		const canSweep =
 			backgroundActive < backgroundLimit &&
-			(single || (setting('enabled', false) && Date.now() >= nextRun))
+			((single && waitingActors.size === 0) ||
+				(!single && setting('enabled', false) && Date.now() >= nextRun))
 		if (!selectedPending && !wake && !canSweep) {
 			await new Promise((r) => setTimeout(r, 100))
 			continue
@@ -585,7 +640,7 @@ try {
 			now = new Date().toISOString()
 		store
 			.prepare(
-				"INSERT INTO jobs(id,actorId,status,createdAt,updatedAt,leaseUntil,trigger) VALUES(?,?,'running',?,?,?,?) ON CONFLICT(id) DO UPDATE SET status='running',updatedAt=excluded.updatedAt",
+				"INSERT INTO jobs(id,actorId,status,createdAt,updatedAt,leaseUntil,trigger) VALUES(?,?,'running',?,?,?,?) ON CONFLICT(id) DO UPDATE SET status='running',updatedAt=excluded.updatedAt,leaseUntil=excluded.leaseUntil,nextAttemptAt=NULL",
 			)
 			.run(
 				id,
@@ -595,6 +650,7 @@ try {
 				new Date(Date.now() + 180000).toISOString(),
 				JSON.stringify(trigger),
 			)
+		let jobStopped = false
 		const execute = async () => {
 			try {
 				await runJob(
@@ -610,38 +666,19 @@ try {
 						store.prepare('DELETE FROM signals WHERE id=?').run(signal.id)
 				})()
 			} catch (e) {
-				const error = e instanceof Error ? e.message : 'AGENT_FAILED'
-				const humanControlled = error.includes('AGENT_HUMAN_CONTROLLED')
-				if (humanControlled) humanControlledActors.add(actor.actorId)
-
-				const saved = store
-					.prepare('SELECT decision FROM jobs WHERE id=?')
-					.get(id) as { decision: string | null }
-				store
-					.prepare('UPDATE jobs SET status=?,error=?,updatedAt=? WHERE id=?')
-					.run(
-						humanControlled
-							? saved.decision
-								? 'ready'
-								: 'queued'
-							: saved.decision &&
-								  !/PRODUCT_4\d\d/.test(error) &&
-								  !PROTECTED_PAUSE.test(error)
-								? 'ready'
-								: 'failed',
-						error,
-						new Date().toISOString(),
-						id,
-					)
-				const priorReason = setting('pauseReason', '') ?? ''
-				if (
-					!humanControlled &&
-					(!PROTECTED_PAUSE.test(priorReason) ||
-						(!/PI_USAGE_UNKNOWN/.test(priorReason) &&
-							PROTECTED_PAUSE.test(error)))
-				)
+				const error =
+					e instanceof SyntaxError
+						? `INVALID_MODEL_RESULT:${e.message}`
+						: e instanceof Error
+							? e.message
+							: 'AGENT_FAILED'
+				const outcome = recordJobFailure(id, error)
+				jobStopped = !outcome.retryScheduled
+				if (outcome.kind === 'human') humanControlledActors.add(actor.actorId)
+				if (outcome.kind === 'protected') {
 					configure('pauseReason', error)
-				if (PROTECTED_PAUSE.test(error)) configure('enabled', false)
+					configure('enabled', false)
+				}
 			}
 		}
 		activeKinds.set(actor.actorId, trigger.kind)
@@ -661,7 +698,7 @@ try {
 			(maximum > 0 && !single && completed >= maximum)
 		)
 			break
-		if (single && setting('pauseReason', null)) break
+		if (single && (jobStopped || setting('pauseReason', null))) break
 	}
 } finally {
 	await Promise.allSettled(active.values())

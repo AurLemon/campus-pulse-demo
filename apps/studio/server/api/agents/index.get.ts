@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import Database from 'better-sqlite3'
 import { productOrigin } from '../../../../agents/client'
 import { runtimeStatus } from '../../../../agents/store'
+import { writingJobId } from '../../../../agents/retry-policy'
 import {
 	readTaskBudget,
 	readLedger,
@@ -34,8 +35,15 @@ export default defineEventHandler(async (event) => {
 		q: String(q.q || '').slice(0, 200),
 		page: Math.max(1, Number(q.page) || 1),
 	})
-	const ledger = await readLedger(),
-		costs = new Map(ledger.entries.map((entry) => [entry.id, entry]))
+	const ledger = await readLedger()
+	const costs = new Map<string, LedgerEntry[]>()
+	for (const entry of ledger.entries) {
+		const jobId = writingJobId(entry.id)
+		if (!jobId) continue
+		const entries = costs.get(jobId) ?? []
+		entries.push(entry)
+		costs.set(jobId, entries)
+	}
 	if (state.pauseReason === 'PI_USAGE_UNKNOWN') {
 		const failed = ledger.entries.findLast(
 			(entry) =>
@@ -51,13 +59,17 @@ export default defineEventHandler(async (event) => {
 			fileMustExist: true,
 		})
 		for (const job of state.jobs) {
-			const entry = costs.get(`runtime-${job.id}`)
+			const entries = costs.get(job.id) ?? []
 			if (job.error === 'PI_USAGE_UNKNOWN')
-				job.error = (await originalFailure(entry)) ?? job.error
-			job.costUsd = entry
-				? (entry.usage?.estimatedCostUsd ?? entry.reservedUsd)
+				job.error = (await originalFailure(entries.at(-1))) ?? job.error
+			job.costUsd = entries.length
+				? entries.reduce(
+						(sum, entry) =>
+							sum + (entry.usage?.estimatedCostUsd ?? entry.reservedUsd),
+						0,
+					)
 				: null
-			job.costReserved = !!entry && !entry.usage
+			job.costReserved = entries.some((entry) => !entry.usage)
 			const d = job.decision,
 				target = d?.action === 'post' ? job.result?.id : d?.targetId
 			if (!target || !d) continue

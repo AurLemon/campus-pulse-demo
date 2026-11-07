@@ -81,7 +81,7 @@ const { t } = useI18n({
 				open: '打开目标',
 				created: '加入',
 				updated: '更新',
-				reservation: '预留',
+				reservation: '含预留',
 				unknown: '无模型费用记录',
 				noTarget: '无需目标',
 				noContent: '无正文',
@@ -871,6 +871,16 @@ onUnmounted(() => clearInterval(timer))
 													<pre
 														class="mt-2 max-w-52 overflow-auto whitespace-pre-wrap"
 														>{{ JSON.stringify(job.result, null, 2) }}</pre>
+													<details v-if="job.retryHistory?.length" class="mt-2">
+														<summary>
+															{{ t('a.retry') }} {{ job.retryCount }} / 5
+														</summary>
+														<pre
+															class="mt-2 max-w-64 overflow-auto whitespace-pre-wrap"
+															>{{
+																JSON.stringify(job.retryHistory, null, 2)
+															}}</pre>
+													</details>
 												</details>
 											</td>
 											<td class="min-w-64 max-w-96 align-top">
@@ -921,6 +931,16 @@ onUnmounted(() => clearInterval(timer))
 													variant="soft"
 													>{{ labels[job.status] ?? job.status }}</UBadge
 												>
+												<p
+													v-if="job.retryCount"
+													class="mt-1 text-xs text-muted"
+												>
+													{{ t('a.retry') }} {{ job.retryCount }} / 5<time
+														v-if="job.nextAttemptAt"
+														class="ml-2"
+														>{{ formatTime(job.nextAttemptAt) }}</time
+													>
+												</p>
 												<p
 													v-if="job.error"
 													class="mt-2 whitespace-pre-wrap break-words text-xs text-error"

@@ -124,21 +124,22 @@ function validateTrigger(
 async function focusedPrivateThreads(actorId: string, conversationId: string) {
 	const conversation = await db.conversation.findUnique({
 		where: { id: conversationId },
-		select: { sequence: true },
+		select: { sequence: true, userLow: true, userHigh: true },
 	})
 	if (!conversation) fail('NOT_FOUND', 404)
 	// getConversationMessages validates membership before returning any private content.
 	const page = await getConversationMessages(
 		actorId,
 		conversationId,
-		Math.max(0, conversation.sequence - 12),
+		Math.max(0, conversation.sequence - 24),
 	)
 	const messages = {
 		...page,
-		items: page.items.slice(-12).map((message) => ({
+		items: page.items.slice(-24).map((message, index, recent) => ({
 			...message,
-			body: message.body.slice(0, 1600),
-			bodyTruncated: message.body.length > 1600,
+			body: message.body.slice(0, index === recent.length - 1 ? 1600 : 800),
+			bodyTruncated:
+				message.body.length > (index === recent.length - 1 ? 1600 : 800),
 		})),
 	}
 
@@ -175,7 +176,76 @@ async function focusedPrivateThreads(actorId: string, conversationId: string) {
 		)
 			return []
 	}
-	return [{ conversationId, messages }]
+	const firstRecent = messages.items[0]?.sequence ?? 0
+	const openingMessages =
+		firstRecent > 1
+			? await db.directMessage.findMany({
+					where: { conversationId, sequence: { lt: firstRecent } },
+					orderBy: { sequence: 'asc' },
+					take: 4,
+					select: {
+						senderId: true,
+						body: true,
+						sequence: true,
+						createdAt: true,
+					},
+				})
+			: []
+	const peerId =
+		conversation.userLow === actorId
+			? conversation.userHigh
+			: conversation.userLow
+	const [peer, friendship, follows] = await Promise.all([
+		db.user.findUniqueOrThrow({
+			where: { id: peerId },
+			select: { id: true, name: true, campus: true },
+		}),
+		db.friendship.findFirst({
+			where: {
+				OR: [
+					{ requesterId: actorId, recipientId: peerId },
+					{ requesterId: peerId, recipientId: actorId },
+				],
+			},
+			select: {
+				id: true,
+				requesterId: true,
+				recipientId: true,
+				status: true,
+				createdAt: true,
+			},
+		}),
+		db.follow.findMany({
+			where: {
+				OR: [
+					{ followerId: actorId, followingId: peerId },
+					{ followerId: peerId, followingId: actorId },
+				],
+			},
+			select: { followerId: true, followingId: true },
+		}),
+	])
+	return [
+		{
+			conversationId,
+			messages,
+			openingMessages: openingMessages.map((message) => ({
+				...message,
+				body: message.body.slice(0, 500),
+			})),
+			historyCoverage: {
+				firstRecentSequence: firstRecent,
+				latestSequence: messages.nextSequence,
+				hasEarlierMessages: firstRecent > openingMessages.length + 1,
+			},
+			peer,
+			relationship: {
+				friendship,
+				following: follows.some((follow) => follow.followerId === actorId),
+				followedBy: follows.some((follow) => follow.followerId === peerId),
+			},
+		},
+	]
 }
 function postContactToken(
 	actorId: string,
@@ -265,6 +335,179 @@ export async function commentReplyOpportunity(
 		consecutiveAgentComments: consecutive,
 	}
 }
+/** Only the verified conversation's text and public posts enter this retrieval. */
+async function privateThreadPublicFacts(actorId: string, texts: string[]) {
+	const normalize = (value: string) =>
+		value.normalize('NFKC').replace(/\s+/gu, ' ').trim().toLowerCase()
+	const conversationText = normalize(texts.join('\n'))
+	const catalog = await db.post.findMany({
+		where: { authorId: actorId },
+		orderBy: { createdAt: 'desc' },
+		take: 200,
+		select: { id: true, title: true },
+	})
+	const matched = catalog
+		.filter((post) => conversationText.includes(normalize(post.title)))
+		.slice(0, 4)
+	const selectedIds = [
+		...new Set([...matched, ...catalog.slice(0, 4)].map((post) => post.id)),
+	]
+	const referenceIds = new Set<string>()
+	for (const text of texts) {
+		for (const match of text.matchAll(
+			/(?:[?&]post=|\/posts\/)([A-Za-z0-9_%:-]+)/gu,
+		)) {
+			try {
+				referenceIds.add(decodeURIComponent(match[1]!))
+			} catch {
+				/* Invalid links are not references. */
+			}
+			if (referenceIds.size >= 4) break
+		}
+		if (referenceIds.size >= 4) break
+	}
+	const rows = await db.post.findMany({
+		where: { id: { in: [...new Set([...selectedIds, ...referenceIds])] } },
+		select: {
+			id: true,
+			authorId: true,
+			title: true,
+			body: true,
+			createdAt: true,
+		},
+	})
+	const posts = rows.map((post) => ({
+		...post,
+		body: post.body.slice(0, 1000),
+		isSelfAuthored: post.authorId === actorId,
+	}))
+	return {
+		ownPublishedPosts: posts.filter((post) => post.isSelfAuthored),
+		referencedPosts: posts.filter((post) => referenceIds.has(post.id)),
+	}
+}
+interface AgentAccountIdentity {
+	id: string
+	name: string
+	campus: string
+	bio: string
+	interests: string
+}
+async function agentAccountFacts(actor: AgentAccountIdentity) {
+	const [
+		recentComments,
+		reading,
+		loans,
+		registrations,
+		reactions,
+		recentPosts,
+	] = await Promise.all([
+		db.comment.findMany({
+			where: { authorId: actor.id, deletedAt: null },
+			orderBy: { createdAt: 'desc' },
+			take: 6,
+			select: {
+				id: true,
+				postId: true,
+				parentId: true,
+				body: true,
+				createdAt: true,
+				post: { select: { title: true } },
+			},
+		}),
+		db.bookState.findMany({
+			where: { userId: actor.id },
+			orderBy: { updatedAt: 'desc' },
+			take: 8,
+			select: {
+				status: true,
+				favorite: true,
+				updatedAt: true,
+				book: { select: { id: true, title: true, authors: true } },
+			},
+		}),
+		db.bookLoan.findMany({
+			where: { userId: actor.id },
+			orderBy: { borrowedAt: 'desc' },
+			take: 6,
+			select: {
+				borrowedAt: true,
+				dueAt: true,
+				returnedAt: true,
+				book: { select: { id: true, title: true } },
+			},
+		}),
+		db.state.findMany({
+			where: { userId: actor.id, kind: 'REGISTER', activityId: { not: null } },
+			orderBy: { createdAt: 'desc' },
+			take: 6,
+			select: {
+				createdAt: true,
+				activity: {
+					select: {
+						id: true,
+						title: true,
+						status: true,
+						startsAt: true,
+						endsAt: true,
+						deadline: true,
+						campus: true,
+						location: true,
+					},
+				},
+			},
+		}),
+		db.state.findMany({
+			where: {
+				userId: actor.id,
+				kind: { in: ['LIKE', 'FAVORITE'] },
+				postId: { not: null },
+			},
+			orderBy: { createdAt: 'desc' },
+			take: 8,
+			select: {
+				kind: true,
+				createdAt: true,
+				post: { select: { id: true, title: true, authorId: true } },
+			},
+		}),
+		db.post.findMany({
+			where: { authorId: actor.id },
+			orderBy: { createdAt: 'desc' },
+			take: 4,
+			select: {
+				id: true,
+				authorId: true,
+				title: true,
+				body: true,
+				createdAt: true,
+			},
+		}),
+	])
+	return {
+		actorId: actor.id,
+		name: actor.name,
+		profile: {
+			campus: actor.campus,
+			bio: actor.bio,
+			interests: JSON.parse(actor.interests),
+		},
+		ownPublishedPosts: recentPosts.map((post) => ({
+			...post,
+			body: post.body.slice(0, 900),
+			isSelfAuthored: true,
+		})),
+		recentComments: recentComments.map((comment) => ({
+			...comment,
+			body: comment.body.slice(0, 350),
+		})),
+		readingStates: reading,
+		bookLoans: loans,
+		activityRegistrations: registrations,
+		recentReactions: reactions,
+		coverage: { recentItemsOnly: true, missingRecordsDoNotProveAbsence: true },
+	}
+}
 export async function agentContext(
 	actorId: string,
 	inputTrigger?: AgentTrigger,
@@ -278,8 +521,24 @@ export async function agentContext(
 			actorId,
 			trigger.conversationId!,
 		)
+		const publicFacts = privateThreads.length
+			? await privateThreadPublicFacts(
+					actorId,
+					privateThreads.flatMap((thread) =>
+						[...thread.openingMessages, ...thread.messages.items].map(
+							(message) => message.body,
+						),
+					),
+				)
+			: { ownPublishedPosts: [], referencedPosts: [] }
 		await heartbeatPresence(actorId)
 		return {
+			selfFacts: {
+				...(privateThreads.length
+					? await agentAccountFacts(actor)
+					: { actorId: actor.id, name: actor.name }),
+				...publicFacts,
+			},
 			now: new Date().toISOString(),
 			trigger,
 			posts: [],
@@ -290,6 +549,7 @@ export async function agentContext(
 			privateThreads,
 		}
 	}
+	const selfFacts = await agentAccountFacts(actor)
 	if (trigger.kind === 'comment') {
 		const target =
 			trigger.targetType === 'comment'
@@ -319,12 +579,13 @@ export async function agentContext(
 						...(rootId ? { OR: [{ id: rootId }, { parentId: rootId }] } : {}),
 					},
 					orderBy: { createdAt: 'desc' },
-					take: 16,
+					take: 24,
 					select: {
 						id: true,
 						postId: true,
 						parentId: true,
 						authorId: true,
+						author: { select: { name: true } },
 						body: true,
 						createdAt: true,
 						_count: { select: { likes: true } },
@@ -333,16 +594,34 @@ export async function agentContext(
 				})
 			: []
 		return {
+			selfFacts,
 			now: new Date().toISOString(),
 			trigger,
 			posts: post ? [{ ...post, body: post.body.slice(0, 2000) }] : [],
 			comments: comments.reverse().map(({ _count, likes, ...comment }) => ({
 				...comment,
+				replyRootId: comment.parentId ?? comment.id,
 				body: comment.body.slice(0, 1000),
 				likes: _count.likes,
 				liked: likes.length > 0,
 			})),
-			thread: { postId: post?.id, rootId, signalCommentId: target?.id },
+			thread: {
+				postId: post?.id,
+				rootId,
+				signalCommentId: target?.id,
+				rootComment: rootId
+					? await db.comment.findUnique({
+							where: { id: rootId },
+							select: {
+								id: true,
+								authorId: true,
+								body: true,
+								deletedAt: true,
+								createdAt: true,
+							},
+						})
+					: null,
+			},
 			replyOpportunity: post
 				? await commentReplyOpportunity(actorId, post.id, rootId)
 				: { mayReply: false },
@@ -361,11 +640,32 @@ export async function agentContext(
 				].filter((id): id is string => !!id),
 			),
 		]
+		const [friendships, following] = await Promise.all([
+			db.friendship.findMany({
+				where: {
+					OR: [
+						{ requesterId: actorId, recipientId: { in: senderIds } },
+						{ recipientId: actorId, requesterId: { in: senderIds } },
+					],
+				},
+				select: {
+					id: true,
+					requesterId: true,
+					recipientId: true,
+					status: true,
+				},
+			}),
+			db.follow.findMany({
+				where: { followerId: actorId, followingId: { in: senderIds } },
+				select: { followingId: true },
+			}),
+		])
 		const socialActors = await db.user.findMany({
 			where: { id: { in: senderIds } },
 			select: { id: true, name: true, campus: true, bio: true },
 		})
 		return {
+			selfFacts,
 			socialActors,
 			friendRequests: await listFriendRequests(actorId),
 			now: new Date().toISOString(),
@@ -375,7 +675,19 @@ export async function agentContext(
 			books: [],
 			loans: [],
 			privateThreads: [],
-			relationships: [],
+			relationships: senderIds.map((userId) => {
+				const friendship =
+					friendships.find(
+						(row) => row.requesterId === userId || row.recipientId === userId,
+					) ?? null
+				return {
+					userId,
+					isSelf: userId === actorId,
+					isFollowing: following.some((row) => row.followingId === userId),
+					isFriend: friendship?.status === 'ACCEPTED',
+					friendship,
+				}
+			}),
 		}
 	}
 
@@ -390,7 +702,7 @@ export async function agentContext(
 		tab: 'recommended',
 		q: '',
 		tag: '',
-		limit: 4,
+		limit: 6,
 	})
 	const posts = recommendation.items.map((p) => ({
 		id: p.id,
@@ -548,15 +860,17 @@ export async function agentContext(
 		lastOwnPostAt: ownLatestPost?.createdAt ?? null,
 		feedQuietMinutes,
 		encouragePost:
-			mayPost && (feedQuietMinutes === null || feedQuietMinutes >= 30),
+			mayPost && (feedQuietMinutes === null || feedQuietMinutes >= 10),
 	}
 
 	await heartbeatPresence(actorId)
 	return {
+		selfFacts,
 		now: new Date().toISOString(),
 		posts: posts.map((p) => ({ ...p, body: p.body.slice(0, 2000) })),
 		comments: comments.map(({ _count, likes, ...comment }) => ({
 			...comment,
+			replyRootId: comment.parentId ?? comment.id,
 			likes: _count.likes,
 			liked: likes.length > 0,
 		})),
@@ -631,7 +945,7 @@ export async function performAgentOperation(op: AgentOperation) {
 		await acknowledgeAgentReads(op)
 		return cached
 	}
-	const d = op.decision,
+	const d = op.decision ? { ...op.decision } : op.decision,
 		now = new Date().toISOString()
 	if (
 		!d ||
@@ -652,6 +966,14 @@ export async function performAgentOperation(op: AgentOperation) {
 		].includes(d.action)
 	)
 		fail('VALIDATION_FAILED', 422)
+	if (d.action === 'comment' && d.parentId) {
+		const parent = await db.comment.findUnique({
+			where: { id: d.parentId },
+			select: { postId: true, parentId: true, deletedAt: true },
+		})
+		if (parent && !parent.deletedAt && parent.postId === d.targetId)
+			d.parentId = parent.parentId ?? d.parentId
+	}
 	const trigger = validateTrigger(actor.id, op.trigger)
 	if (
 		trigger.kind === 'direct-message' &&

@@ -4,11 +4,17 @@ import Database from 'better-sqlite3'
 import { randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import { resolve } from 'node:path'
+import {
+	jobFailureKind,
+	MAX_JOB_RETRIES,
+	retryDelayMs,
+} from './retry-policy.ts'
 import type {
 	AgentPersona,
 	AgentRuntimeStatus,
 	AgentJobFilter,
 	AgentJob,
+	AgentRetryRecord,
 } from '../../packages/contracts/agents.ts'
 export const directory = resolve(
 	process.env.CAMPUS_AGENT_DATA_DIR ?? '.data/agents',
@@ -72,6 +78,10 @@ export function enqueueActor(actorId: string) {
 	return id
 }
 interface JobRow {
+	retryCount: number
+	nextAttemptAt: string | null
+	retryHistory: string
+	modelBatchId: string | null
 	trigger: string | null
 	id: string
 	actorId: string
@@ -94,6 +104,10 @@ for (const [table, column, type] of [
 	['signals', 'kind', "TEXT NOT NULL DEFAULT ''"],
 	['jobs', 'readAcknowledgements', 'TEXT'],
 	['jobs', 'trigger', 'TEXT'],
+	['jobs', 'retryCount', 'INTEGER NOT NULL DEFAULT 0'],
+	['jobs', 'nextAttemptAt', 'TEXT'],
+	['jobs', 'retryHistory', "TEXT NOT NULL DEFAULT '[]'"],
+	['jobs', 'modelBatchId', 'TEXT'],
 	['signals', 'trigger', 'TEXT'],
 ] as const) {
 	if (
@@ -104,6 +118,67 @@ for (const [table, column, type] of [
 		).some((item) => item.name === column)
 	)
 		store.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`)
+}
+/** Keep retry accounting in the runtime DB so restarts cannot reset the limit. */
+export function recordJobFailure(id: string, error: string) {
+	return store.transaction(() => {
+		const job = store.prepare('SELECT * FROM jobs WHERE id=?').get(id) as JobRow
+		const kind = jobFailureKind(error)
+		if (kind === 'human') {
+			store
+				.prepare(
+					'UPDATE jobs SET status=?,error=?,updatedAt=?,nextAttemptAt=NULL WHERE id=?',
+				)
+				.run(
+					job.decision ? 'ready' : 'queued',
+					error,
+					new Date().toISOString(),
+					id,
+				)
+			return { kind, retryScheduled: false }
+		}
+		const retryable = kind === 'regenerate' || kind === 'transient'
+		const retryScheduled = retryable && job.retryCount < MAX_JOB_RETRIES
+		const retry = job.retryCount + Number(retryScheduled)
+		const now = new Date().toISOString()
+		const history = JSON.parse(job.retryHistory) as AgentRetryRecord[]
+		history.push({
+			retry: job.retryCount,
+			error,
+			at: now,
+			decision: job.decision ? JSON.parse(job.decision) : null,
+		})
+		const regenerate =
+			retryScheduled && (kind === 'regenerate' || !job.decision)
+		store
+			.prepare(
+				`UPDATE jobs SET status=?,error=?,retryCount=?,retryHistory=?,updatedAt=?,nextAttemptAt=?,
+			decision=CASE WHEN ? THEN NULL ELSE decision END,
+			action=CASE WHEN ? THEN NULL ELSE action END,
+			readAcknowledgements=CASE WHEN ? THEN NULL ELSE readAcknowledgements END,
+			targetTitle=CASE WHEN ? THEN NULL ELSE targetTitle END,
+			modelBatchId=CASE WHEN ? THEN NULL ELSE modelBatchId END WHERE id=?`,
+			)
+			.run(
+				retryScheduled ? 'ready' : 'failed',
+				retryable && !retryScheduled
+					? `RETRY_LIMIT_EXCEEDED(${MAX_JOB_RETRIES}):${error}`
+					: error,
+				retry,
+				JSON.stringify(history),
+				now,
+				retryScheduled
+					? new Date(Date.now() + retryDelayMs(retry)).toISOString()
+					: null,
+				Number(regenerate),
+				Number(regenerate),
+				Number(regenerate),
+				Number(regenerate),
+				Number(regenerate),
+				id,
+			)
+		return { kind, retryScheduled }
+	})()
 }
 export function runtimeStatus(filter: AgentJobFilter = {}): AgentRuntimeStatus {
 	const people = personas(),
@@ -152,6 +227,7 @@ export function runtimeStatus(filter: AgentJobFilter = {}): AgentRuntimeStatus {
 					: 'posts'
 		return {
 			...row,
+			retryHistory: JSON.parse(row.retryHistory) as AgentRetryRecord[],
 			trigger: row.trigger
 				? (JSON.parse(row.trigger) as AgentJob['trigger'])
 				: null,
@@ -200,7 +276,16 @@ export function remember(actorId: string, body: string) {
 		.run(actorId, body, new Date().toISOString())
 	store
 		.prepare(
-			'DELETE FROM memories WHERE actorId=? AND id NOT IN (SELECT id FROM memories WHERE actorId=? ORDER BY id DESC LIMIT 12)',
+			`DELETE FROM memories WHERE actorId=? AND id NOT IN (
+				SELECT id FROM (
+					SELECT id, ROW_NUMBER() OVER (
+						PARTITION BY CASE WHEN json_valid(body) THEN
+							CASE WHEN json_extract(body,'$.action')='message'
+							THEN 'message:' || COALESCE(json_extract(body,'$.targetId'),'') ELSE 'public' END
+						ELSE 'public' END ORDER BY id DESC
+					) AS position FROM memories WHERE actorId=?
+				) WHERE position<=12 ORDER BY id DESC LIMIT 120
+			)`,
 		)
 		.run(actorId, actorId)
 }

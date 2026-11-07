@@ -92,7 +92,16 @@ export interface AgentOperation {
 	actorId: string
 	decision: AgentDecision
 }
+export interface AgentRetryRecord {
+	retry: number
+	error: string
+	at: string
+	decision: AgentDecision | null
+}
 export interface AgentJob {
+	retryCount: number
+	nextAttemptAt: string | null
+	retryHistory: AgentRetryRecord[]
 	trigger?: AgentTrigger | null
 	id: string
 	actorId: string
