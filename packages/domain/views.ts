@@ -1,4 +1,5 @@
 import { db } from './prisma.ts'
+import { resolveMentions } from '../contracts/mentions.ts'
 import { defaultUserAvatar } from '@campus/contracts'
 import type {
 	PublicUser,
@@ -93,8 +94,13 @@ export async function postView(
 			? '好友也在关注'
 			: undefined
 	const { source: _source, ...visible } = p
+	const mentionUsers = /[@＠]/u.test(p.title + p.body)
+		? await db.user.findMany({ select: { id: true, name: true } })
+		: []
 	return {
 		...visible,
+		bodyMentions: resolveMentions(p.body, mentionUsers),
+		titleMentions: resolveMentions(p.title, mentionUsers),
 		kind: p.kind as PostView['kind'],
 		posterTemplate: p.posterTemplate as PostView['posterTemplate'],
 		posterAspect: p.posterAspect as PostView['posterAspect'],

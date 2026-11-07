@@ -1,11 +1,21 @@
-import type { MediaAsset, PublicUser } from './index.ts'
+import type { Friendship, MediaAsset, PublicUser } from './index.ts'
 export type NotificationKind =
-	'LIKE' | 'FAVORITE' | 'FOLLOW' | 'COMMENT' | 'REPLY'
+	| 'LIKE'
+	| 'FAVORITE'
+	| 'FOLLOW'
+	| 'COMMENT'
+	| 'REPLY'
+	| 'FRIEND_REQUEST'
+	| 'FRIEND_ACCEPTED'
+	| 'MENTION'
 export interface CommunityEvent {
 	id: string
 	kind:
 		| 'ReactionChanged'
 		| 'FollowCreated'
+		| 'FriendRequested'
+		| 'FriendAccepted'
+		| 'MentionCreated'
 		| 'CommentCreated'
 		| 'DirectMessageCreated'
 		| 'BookLoanChanged'
@@ -46,6 +56,7 @@ export interface NotificationView {
 	targetId: string
 	targetAvailable: boolean
 	targetUrl: string | null
+	targetTitle: string | null
 	createdAt: string
 	read: boolean
 }
@@ -54,4 +65,8 @@ export interface ConversationPage {
 	items: ConversationView[]
 	nextCursor: string | null
 	hasMore: boolean
+}
+
+export interface FriendRequestView extends Friendship {
+	requester: PublicUser
 }

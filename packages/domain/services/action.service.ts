@@ -14,15 +14,55 @@ export async function act(userId: string, mutation: Mutation, now: string) {
 	)
 		fail('VALIDATION_FAILED', 422)
 	return db.$transaction(async (tx) => {
+		if (mutation.targetType === 'comment') {
+			if (action !== 'like') fail('VALIDATION_FAILED', 422)
+			const comment = await tx.comment.findUnique({ where: { id: targetId } })
+			if (!comment || comment.deletedAt) fail('NOT_FOUND', 404)
+			const where = { userId_commentId: { userId, commentId: targetId } }
+			const existing = await tx.commentLike.findUnique({ where })
+			if (active && !existing) {
+				await tx.commentLike.create({
+					data: { userId, commentId: targetId, createdAt: now },
+				})
+				await enqueueCommunityEvent(tx, {
+					id: `comment-like:${userId}:${targetId}:${now}`,
+					kind: 'ReactionChanged',
+					actorId: userId,
+					recipientId: comment.authorId,
+					targetType: 'comment',
+					targetId,
+					notificationKind: 'LIKE',
+					occurredAt: now,
+				})
+			} else if (!active && existing) {
+				await tx.commentLike.delete({ where })
+			}
+			return {
+				ok: true,
+				likes: await tx.commentLike.count({ where: { commentId: targetId } }),
+				liked: active,
+			}
+		}
 		if (action === 'accept') {
 			const request = await tx.friendship.findUnique({
 				where: { id: targetId },
 			})
 			if (!request) fail('NOT_FOUND', 404)
 			if (request.recipientId !== userId) fail('FORBIDDEN', 403)
+			if (request.status === 'ACCEPTED') return { ok: true }
 			await tx.friendship.update({
 				where: { id: request.id },
 				data: { status: 'ACCEPTED' },
+			})
+			await enqueueCommunityEvent(tx, {
+				id: `friend-accepted:${request.id}:${now}`,
+				kind: 'FriendAccepted',
+				actorId: userId,
+				recipientId: request.requesterId,
+				targetType: 'user',
+				targetId: userId,
+				notificationKind: 'FRIEND_ACCEPTED',
+				occurredAt: now,
 			})
 			return { ok: true }
 		}
@@ -33,8 +73,19 @@ export async function act(userId: string, mutation: Mutation, now: string) {
 			if (action === 'follow') {
 				const id = `follow:${userId}:${targetId}`
 				if (active) {
+					if (
+						await tx.follow.findUnique({
+							where: {
+								followerId_followingId: {
+									followerId: userId,
+									followingId: targetId,
+								},
+							},
+						})
+					)
+						return { ok: true }
 					await enqueueCommunityEvent(tx, {
-						id,
+						id: `${id}:${now}`,
 						kind: 'FollowCreated',
 						actorId: userId,
 						recipientId: targetId,
@@ -75,7 +126,7 @@ export async function act(userId: string, mutation: Mutation, now: string) {
 				if (!active) {
 					if (existing)
 						await tx.friendship.delete({ where: { id: existing.id } })
-				} else if (!existing)
+				} else if (!existing) {
 					await tx.friendship.create({
 						data: {
 							id,
@@ -85,6 +136,17 @@ export async function act(userId: string, mutation: Mutation, now: string) {
 							createdAt: now,
 						},
 					})
+					await enqueueCommunityEvent(tx, {
+						id: `friend-request:${id}:${now}`,
+						kind: 'FriendRequested',
+						actorId: userId,
+						recipientId: targetId,
+						targetType: 'user',
+						targetId: userId,
+						notificationKind: 'FRIEND_REQUEST',
+						occurredAt: now,
+					})
+				}
 			}
 			return { ok: true }
 		}
@@ -140,7 +202,7 @@ export async function act(userId: string, mutation: Mutation, now: string) {
 			const recipientId =
 				'authorId' in target ? target.authorId : target.organizerId
 			await enqueueCommunityEvent(tx, {
-				id: `reaction:${userId}:${targetId}:${kind}`,
+				id: `reaction:${userId}:${targetId}:${kind}:${now}`,
 				kind: 'ReactionChanged',
 				actorId: userId,
 				recipientId,

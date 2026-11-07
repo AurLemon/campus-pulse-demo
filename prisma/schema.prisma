@@ -25,6 +25,7 @@ model User {
   Activity_organizerId   Activity[]          @relation("Activity_organizerId")
   Post_authorId          Post[]              @relation("Post_authorId")
   Comment_authorId       Comment[]           @relation("Comment_authorId")
+  commentLikes           CommentLike[]
   Friendship_requesterId Friendship[]        @relation("Friendship_requesterId")
   Friendship_recipientId Friendship[]        @relation("Friendship_recipientId")
   Follow_followerId      Follow[]            @relation("Follow_followerId")
@@ -102,10 +103,23 @@ model Comment {
   author           User      @relation("Comment_authorId", fields: [authorId], references: [id], onDelete: Cascade)
   parent           Comment?  @relation("Comment_parentId", fields: [parentId], references: [id], onDelete: NoAction)
   Comment_parentId Comment[] @relation("Comment_parentId")
+  likes            CommentLike[]
 
   @@index([postId])
   @@index([authorId])
   @@index([parentId])
+}
+
+model CommentLike {
+  userId    String
+  commentId String
+  createdAt String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment   Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@id([userId, commentId])
+  @@index([commentId])
+  @@index([createdAt])
 }
 
 model Friendship {

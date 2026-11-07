@@ -2,6 +2,10 @@ import { randomUUID, createHash } from 'node:crypto'
 import { enqueueCommunityEvent, validateMessageMedia } from '../messages.ts'
 import { db } from '../prisma.ts'
 import { fail, text } from '../validation.ts'
+import { publicUser } from '../views.ts'
+import { enqueueContentMentions } from '../mentions.ts'
+import type { CommentView } from '@campus/contracts'
+import { resolveMentions } from '../../contracts/mentions.ts'
 
 export async function createComment(
 	userId: string,
@@ -89,6 +93,13 @@ export async function createComment(
 				occurredAt: now,
 			})
 		}
+		await enqueueContentMentions(tx, {
+			authorId: userId,
+			targetType: 'comment',
+			targetId: id,
+			text: body,
+			occurredAt: now,
+		})
 		return { id }
 	})
 }
@@ -102,11 +113,19 @@ export async function editComment(userId: string, id: string, value: unknown) {
 		if (comment.deletedAt) fail('CONFLICT', 409)
 		if (!body && !JSON.parse(comment.mediaIds).length)
 			fail('VALIDATION_FAILED', 422)
-		return tx.comment.update({
+		const updated = await tx.comment.update({
 			where: { id },
 			data: { body },
 			select: { id: true, body: true },
 		})
+		await enqueueContentMentions(tx, {
+			authorId: userId,
+			targetType: 'comment',
+			targetId: id,
+			text: body,
+			occurredAt: new Date().toISOString(),
+		})
+		return updated
 	})
 }
 
@@ -127,4 +146,52 @@ export async function removeComment(userId: string, id: string, now: string) {
 		})
 		return { ok: true, id, removed: false }
 	})
+}
+
+export async function listPostComments(
+	postId: string,
+	userId?: string,
+): Promise<CommentView[]> {
+	const comments = await db.comment.findMany({
+		where: { postId },
+		orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+		include: {
+			author: true,
+			_count: { select: { likes: true } },
+			likes: { where: { userId: userId ?? '' }, select: { userId: true } },
+		},
+	})
+	const mediaIds = comments.flatMap((comment) =>
+		comment.deletedAt ? [] : (JSON.parse(comment.mediaIds) as string[]),
+	)
+	const assets = mediaIds.length
+		? await db.mediaAsset.findMany({
+				where: { id: { in: [...new Set(mediaIds)] } },
+			})
+		: []
+	const media = new Map(assets.map((asset) => [asset.id, asset]))
+	const mentionUsers = comments.some(
+		(comment) => !comment.deletedAt && /[@＠]/u.test(comment.body),
+	)
+		? await db.user.findMany({ select: { id: true, name: true } })
+		: []
+	return comments.map(
+		({ source: _source, deletedAt, author, _count, likes, ...comment }) => {
+			const ids: string[] = deletedAt ? [] : JSON.parse(comment.mediaIds)
+			return {
+				...comment,
+				body: deletedAt ? '' : comment.body,
+				mentions: deletedAt ? [] : resolveMentions(comment.body, mentionUsers),
+				mediaIds: ids,
+				media: ids.flatMap((id) => {
+					const asset = media.get(id)
+					return asset ? [asset] : []
+				}),
+				deleted: !!deletedAt,
+				author: publicUser(author),
+				stats: { likes: deletedAt ? 0 : _count.likes },
+				viewer: { liked: !deletedAt && likes.length > 0 },
+			}
+		},
+	)
 }

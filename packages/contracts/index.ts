@@ -1,3 +1,4 @@
+import type { TextMention } from './mentions.ts'
 export { CAMPUSES } from './catalog.ts'
 export type ContentSource = 'Synthetic' | 'Real' | 'Generated'
 export interface User {
@@ -173,7 +174,7 @@ export interface Mutation {
 	action: 'like' | 'favorite' | 'register' | 'follow' | 'friend' | 'accept'
 	targetId: string
 	active: boolean
-	targetType?: 'post' | 'activity'
+	targetType?: 'post' | 'activity' | 'comment'
 }
 export interface ApiErrorData {
 	code: string
@@ -203,6 +204,8 @@ export interface ActivityView extends Omit<Activity, 'source'> {
 	availability: 'OPEN' | 'FULL' | 'CLOSED' | 'CANCELLED' | 'ENDED'
 }
 export interface PostView extends Omit<Post, 'source'> {
+	bodyMentions?: TextMention[]
+	titleMentions?: TextMention[]
 	author: PublicUser
 	activity: ActivityView | null
 	media: MediaAsset[]
@@ -211,6 +214,9 @@ export interface PostView extends Omit<Post, 'source'> {
 	reason?: string
 }
 export interface CommentView extends Omit<Comment, 'source'> {
+	mentions?: TextMention[]
+	stats: { likes: number }
+	viewer: { liked: boolean }
 	media: MediaAsset[]
 	deleted: boolean
 	author: PublicUser
@@ -228,6 +234,9 @@ export interface SidebarData {
 	schedule: ActivityView[]
 	recommendations: ActivityView[]
 	interests: Record<string, number>
+}
+export interface PostComments {
+	comments: CommentView[]
 }
 export interface PostDetail {
 	post: PostView

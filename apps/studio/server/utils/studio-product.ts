@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto'
 import {
 	createError,
 	getHeader,
+	getRequestURL,
 	setHeader,
 	setResponseStatus,
 	type H3Event,
@@ -78,6 +79,16 @@ export function studioProductOrigin(event: H3Event, studioOrigin: string) {
 	const origin = new URL(studioOrigin)
 	origin.port = '3000'
 	return origin.origin
+}
+/** Browser links must use the same cookie host as the current Studio page. */
+export function studioProductBrowserOrigin(
+	event: H3Event,
+	productOrigin: string,
+) {
+	const product = new URL(pureLoopbackOrigin(productOrigin))
+	const studio = new URL(pureLoopbackOrigin(getRequestURL(event).origin))
+	product.hostname = studio.hostname
+	return product.origin
 }
 export async function requestStudioProduct<T>(
 	event: H3Event,

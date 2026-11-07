@@ -438,3 +438,5 @@ export function recommendActivities(
 ): RecommendationResult {
 	return recommend(input, 'activity', options)
 }
+
+export { rankComments } from './comments.ts'

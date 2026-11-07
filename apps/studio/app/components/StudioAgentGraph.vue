@@ -5,6 +5,7 @@ import type {
 	AgentGraphEdgeKind,
 	AgentGraphState,
 	AgentGraphEvent,
+	AgentGraphLike,
 } from '../../shared/types/agent-graph'
 interface Point {
 	x: number
@@ -13,7 +14,7 @@ interface Point {
 interface GraphProps {
 	productOrigin: string
 }
-defineProps<GraphProps>()
+const props = defineProps<GraphProps>()
 interface PositionedNode extends AgentGraphNode, Point {}
 interface GraphDrag {
 	pointer: number
@@ -68,6 +69,9 @@ const { t } = useI18n({
 			humanHelp: '人工接管表示存在有效登录会话，不代表当前在线',
 			post: '发布帖子',
 			like: '点赞',
+			friendAction: '加好友',
+			accept: '接受好友申请',
+			followAction: '关注',
 			favorite: '收藏',
 			skip: '保持静默',
 			borrow: '借书',
@@ -107,6 +111,28 @@ let drag: GraphDrag | undefined,
 	wheelFrame = 0,
 	pendingMove: PointerEvent | undefined,
 	pendingWheel: { x: number; y: number; delta: number } | undefined
+const heartEffects = shallowRef<AgentGraphLike[]>([])
+const seenLikes = new Map<string, number>()
+const heartTimers = new Set<ReturnType<typeof setTimeout>>()
+function updateHeartEffects(data: AgentGraphResponse) {
+	const observedAt = Date.parse(data.observedAt)
+	for (const [id, at] of seenLikes)
+		if (observedAt - at > 60_000) seenLikes.delete(id)
+	for (const like of data.likes ?? []) {
+		if (seenLikes.has(like.id)) continue
+		seenLikes.set(like.id, Date.parse(like.occurredAt))
+		if (!response.value && observedAt - Date.parse(like.occurredAt) > 3000)
+			continue
+		heartEffects.value = [...heartEffects.value, like]
+		const timer = setTimeout(() => {
+			heartEffects.value = heartEffects.value.filter(
+				(effect) => effect.id !== like.id,
+			)
+			heartTimers.delete(timer)
+		}, 3000)
+		heartTimers.add(timer)
+	}
+}
 const nodes = computed<PositionedNode[]>(() =>
 	(response.value?.nodes ?? [])
 		.filter(
@@ -131,31 +157,75 @@ const edges = computed(() =>
 			: []
 	}),
 )
-// Batch edges by visual style, rather than patching thousands of SVG elements.
+// Keep historical relationships quiet and draw recent interactions above them.
+interface EdgePathGroup {
+	key: string
+	kind: AgentGraphEdgeKind
+	dim: boolean
+	focused: boolean
+	live: boolean
+	segments: string[]
+}
 const edgePaths = computed(() => {
-	const groups = new Map<
-		string,
-		{ key: string; kind: AgentGraphEdgeKind; dim: boolean; segments: string[] }
-	>()
+	const groups = new Map<string, EdgePathGroup>()
+	const observedAt = Date.parse(response.value?.observedAt ?? '')
 	for (const edge of edges.value) {
-		const dim =
-			!!selectedId.value &&
-			edge.source !== selectedId.value &&
-			edge.target !== selectedId.value
-		const key = `${edge.kind}-${dim}`
+		const connected =
+			edge.source === selectedId.value || edge.target === selectedId.value
+		const dim = !!selectedId.value && !connected
+		const age = observedAt - Date.parse(edge.lastAt ?? '')
+		const live = !dim && (edge.kind === 'task' || (age >= 0 && age < 120_000))
+		const focused =
+			!dim &&
+			(connected ||
+				live ||
+				((edge.kind === 'message' || edge.kind === 'comment') &&
+					age >= 0 &&
+					age < 900_000))
+		const key = `${edge.kind}-${dim}-${focused}-${live}`
 		let group = groups.get(key)
 		if (!group) {
-			group = { key, kind: edge.kind, dim, segments: [] }
+			group = { key, kind: edge.kind, dim, focused, live, segments: [] }
 			groups.set(key, group)
 		}
 		group.segments.push(
 			`M${edge.sourceNode.x},${edge.sourceNode.y}L${edge.targetNode.x},${edge.targetNode.y}`,
 		)
 	}
-	return [...groups.values()].map(({ segments, ...group }) => ({
-		...group,
-		d: segments.join(''),
-	}))
+	return [...groups.values()]
+		.sort(
+			(a, b) =>
+				Number(a.focused) - Number(b.focused) ||
+				Number(a.live) - Number(b.live),
+		)
+		.map(({ segments, ...group }) => ({ ...group, d: segments.join('') }))
+})
+const hearts = computed(() => {
+	const latest = new Map(
+		heartEffects.value.map((effect) => [effect.actorId, effect]),
+	)
+	return [...latest.values()].flatMap((effect) => {
+		const node = nodeMap.value.get(effect.actorId)
+		return node ? [{ effect, node }] : []
+	})
+})
+const postBubbles = computed(() => {
+	const observedAt = Date.parse(response.value?.observedAt ?? '')
+	const authors = new Set<string>()
+	return (response.value?.events ?? []).flatMap((event) => {
+		const node = nodeMap.value.get(event.actorId)
+		const age = observedAt - Date.parse(event.occurredAt)
+		if (
+			event.kind !== 'post' ||
+			!node ||
+			authors.has(event.actorId) ||
+			age < 0 ||
+			age >= 45_000
+		)
+			return []
+		authors.add(event.actorId)
+		return [{ event, node }]
+	})
 })
 const filterOptions = computed(() => [
 	{ label: t('all'), value: 'all' },
@@ -213,6 +283,11 @@ function eventLabel(event: AgentGraphEvent) {
 		target: event.targetName ?? '',
 	})
 }
+function eventLink(event: AgentGraphEvent) {
+	return event.postId
+		? `${props.productOrigin}/?post=${encodeURIComponent(event.postId)}`
+		: undefined
+}
 function openEvent(event: AgentGraphEvent) {
 	openedEvent.value = event
 	eventModalOpen.value = true
@@ -238,6 +313,7 @@ async function refresh() {
 		})
 		if (disposed) return
 		seedPositions(data)
+		updateHeartEffects(data)
 		response.value = data
 		failed.value = false
 	} catch {
@@ -394,7 +470,13 @@ function time(value: string) {
 	}).format(new Date(value))
 }
 function action(value: string | null) {
-	return value ? t(value === 'failed' ? 'failedJob' : value) : t('noTask')
+	if (!value) return t('noTask')
+	const keys: Record<string, string> = {
+		failed: 'failedJob',
+		follow: 'followAction',
+		friend: 'friendAction',
+	}
+	return t(keys[value] ?? value)
 }
 onMounted(() => {
 	observer = new ResizeObserver(([entry]) => {
@@ -409,6 +491,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
 	disposed = true
+	for (const timer of heartTimers) clearTimeout(timer)
 	cancelAnimationFrame(moveFrame)
 	cancelAnimationFrame(wheelFrame)
 	clearTimeout(timer)
@@ -501,7 +584,14 @@ onBeforeUnmount(() => {
 							v-for="path in edgePaths"
 							:key="path.key"
 							:d="path.d"
-							:class="[`edge-${path.kind}`, { 'is-dim': path.dim }]"
+							:class="[
+								`edge-${path.kind}`,
+								{
+									'is-dim': path.dim,
+									'is-focused': path.focused,
+									'is-live': path.live,
+								},
+							]"
 							fill="none"
 							vector-effect="non-scaling-stroke"
 						/>
@@ -571,6 +661,59 @@ onBeforeUnmount(() => {
 							{{ node.name }}
 						</text>
 						<title>{{ node.name }} / {{ t(node.state) }}</title>
+					</g>
+					<g
+						v-for="heart in hearts"
+						:key="heart.effect.id"
+						:transform="`translate(${heart.node.x} ${heart.node.y}) scale(${1 / zoom})`"
+						aria-hidden="true"
+						class="node-like-effect"
+					>
+						<circle class="node-like-ring" :r="14 * zoom + 5" />
+						<text
+							:x="14 * zoom + 4"
+							:y="-14 * zoom - 5"
+							class="node-like-heart"
+						>
+							♥
+						</text>
+						<text
+							:x="-14 * zoom - 18"
+							y="-3"
+							class="node-like-heart node-like-heart--second"
+						>
+							♥
+						</text>
+						<text
+							x="0"
+							:y="14 * zoom + 18"
+							class="node-like-heart node-like-heart--third"
+						>
+							♥
+						</text>
+					</g>
+					<g
+						v-for="bubble in postBubbles"
+						:key="bubble.event.id"
+						:transform="`translate(${bubble.node.x} ${bubble.node.y}) scale(${1 / zoom})`"
+					>
+						<a
+							class="node-post-bubble"
+							:href="eventLink(bubble.event)"
+							target="_blank"
+							rel="noopener noreferrer"
+							:aria-label="eventLabel(bubble.event)"
+							@pointerdown.stop
+							@click.stop
+						>
+							<path
+								d="M-35,-48H35Q41,-48 41,-42V-27Q41,-21 35,-21H5L0,-15L-5,-21H-35Q-41,-21 -41,-27V-42Q-41,-48 -35,-48Z"
+							/>
+							<text y="-31" text-anchor="middle">{{ t('post') }}</text>
+							<title>
+								{{ bubble.event.title || eventLabel(bubble.event) }}
+							</title>
+						</a>
 					</g>
 				</g>
 			</svg>
@@ -659,17 +802,21 @@ onBeforeUnmount(() => {
 				tag="div"
 				class="agent-graph-event-list"
 			>
-				<button
+				<component
+					:is="event.kind === 'message' ? 'button' : 'a'"
 					v-for="event in response?.events ?? []"
 					:key="event.id"
-					type="button"
+					:type="event.kind === 'message' ? 'button' : undefined"
+					:href="eventLink(event)"
+					:target="event.kind !== 'message' ? '_blank' : undefined"
+					:rel="event.kind !== 'message' ? 'noopener noreferrer' : undefined"
 					class="agent-graph-event"
-					@click="openEvent(event)"
+					@click="event.kind === 'message' && openEvent(event)"
 				>
 					<span>{{ eventLabel(event) }}</span
 					><small>{{ time(event.occurredAt) }}</small>
 					<p>{{ event.body || event.title }}</p>
-				</button>
+				</component>
 				<p
 					v-if="!response?.events?.length"
 					key="empty"
@@ -859,30 +1006,125 @@ onBeforeUnmount(() => {
 }
 .agent-graph-edges .edge-friend {
 	stroke: var(--graph-friend);
-	stroke-width: 1.15;
-	opacity: 0.48;
+	stroke-width: 0.8;
+	opacity: 0.16;
 }
 .agent-graph-edges .edge-follow {
 	stroke: var(--graph-follow);
-	stroke-width: 0.95;
+	stroke-width: 0.75;
 	stroke-dasharray: 6 5;
-	opacity: 0.45;
+	opacity: 0.13;
 }
 .agent-graph-edges .edge-message {
-	stroke: #55a49a;
+	stroke: #0d9488;
 	stroke-width: 1.5;
-	opacity: 0.55;
+	opacity: 0.4;
 }
 .agent-graph-edges .edge-comment {
-	stroke: #a78bfa;
-	stroke-width: 1.3;
-	opacity: 0.5;
+	stroke: #8b5cf6;
+	stroke-width: 1.5;
+	opacity: 0.35;
 }
 .agent-graph-edges .edge-task {
 	stroke: #3b82f6;
 	stroke-width: 2;
 	opacity: 0.85;
 	stroke-dasharray: 5 4;
+}
+.agent-graph-edges path.is-focused {
+	stroke-width: 2.8;
+	opacity: 0.95;
+}
+.agent-graph-edges path.is-live {
+	stroke-width: 3.4;
+	stroke-dasharray: 9 6;
+	animation: graph-interaction 1.2s linear infinite;
+}
+@keyframes graph-interaction {
+	to {
+		stroke-dashoffset: -30;
+	}
+}
+.node-like-effect {
+	pointer-events: none;
+}
+.node-like-ring {
+	fill: rgb(239 68 68 / 0.12);
+	stroke: #ef4444;
+	stroke-width: 2.5px;
+	animation: graph-like-ring 750ms ease-in-out infinite;
+}
+@keyframes graph-like-ring {
+	0%,
+	100% {
+		stroke-opacity: 1;
+		fill-opacity: 0.3;
+	}
+	50% {
+		stroke-opacity: 0.3;
+		fill-opacity: 1;
+	}
+}
+.node-like-heart {
+	fill: #ef4444;
+	font-size: 18px;
+	paint-order: stroke;
+	stroke: var(--ui-bg);
+	stroke-width: 2px;
+	animation: graph-like-float 3s ease-out forwards;
+}
+.node-like-heart--second {
+	animation-delay: 100ms;
+}
+.node-like-heart--third {
+	animation-delay: 200ms;
+}
+@keyframes graph-like-float {
+	0% {
+		opacity: 0;
+		transform: translateY(4px) scale(0.6);
+	}
+	12% {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+	}
+	80% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 0;
+		transform: translateY(-30px) scale(1.1);
+	}
+}
+.node-post-bubble {
+	cursor: pointer;
+	animation: graph-post-arrive 240ms ease-out;
+}
+.node-post-bubble path {
+	fill: var(--ui-bg);
+	stroke: var(--ui-primary);
+	stroke-width: 1.5;
+	filter: drop-shadow(0 2px 4px rgb(0 0 0 / 0.12));
+}
+.node-post-bubble text {
+	fill: var(--ui-primary);
+	font-size: 12px;
+	font-weight: 600;
+}
+.node-post-bubble:hover path,
+.node-post-bubble:focus-visible path {
+	fill: var(--ui-bg-elevated);
+	stroke-width: 2.5;
+}
+@keyframes graph-post-arrive {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
 }
 .agent-graph-edges path.is-dim {
 	opacity: 0.045;
@@ -1160,6 +1402,10 @@ onBeforeUnmount(() => {
 	scrollbar-width: none;
 }
 .agent-graph-event {
+	color: inherit;
+	font: inherit;
+	text-decoration: none;
+	cursor: pointer;
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) auto;
 	gap: 5px 8px;
@@ -1217,6 +1463,12 @@ onBeforeUnmount(() => {
 @media (prefers-reduced-motion: reduce) {
 	.graph-event-enter-active {
 		transition: none;
+	}
+	.agent-graph-edges path.is-live,
+	.node-like-ring,
+	.node-like-heart,
+	.node-post-bubble {
+		animation: none;
 	}
 }
 </style>

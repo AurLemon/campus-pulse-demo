@@ -6,7 +6,8 @@
 		".": "./index.ts",
 		"./books": "./books.ts",
 		"./messages": "./messages.ts",
-		"./agents": "./agents.ts"
+		"./agents": "./agents.ts",
+		"./mentions": "./mentions.ts"
 	},
 	"dependencies": {}
 }

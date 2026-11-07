@@ -24,6 +24,11 @@
 		"kindCOMMENT": "评论了你的帖子",
 		"kindREPLY": "回复了你的评论",
 		"readAll": "全部通知标为已读",
-		"moreConversations": "加载更多会话"
+		"moreConversations": "加载更多会话",
+		"friends": "好友申请",
+		"kindFRIEND_REQUEST": "好友申请",
+		"kindFRIEND_ACCEPTED": "已是好友",
+		"mentions": "{'@'}我的",
+		"kindMENTION": "提到了你"
 	}
 }

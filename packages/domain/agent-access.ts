@@ -11,6 +11,7 @@ import { db } from './prisma.ts'
 import { fail, text } from './validation.ts'
 import { act } from './services/action.service.ts'
 import { createComment } from './services/comment.service.ts'
+import { enqueueContentMentions } from './mentions.ts'
 import { feed } from './feed.ts'
 import { setBookState, changeBookLoan } from './books.ts'
 import {
@@ -20,6 +21,7 @@ import {
 	listConversations,
 	markConversationRead,
 	createConversation,
+	listFriendRequests,
 } from './messages.ts'
 import type { AgentOperation, AgentTrigger } from '../contracts/agents.ts'
 export function assertAgentRequest(event: H3Event, socketAttested = false) {
@@ -216,6 +218,53 @@ async function proactiveContactAllowed(
 		(!lastMessage || Date.parse(lastMessage.createdAt) <= cutoff)
 	)
 }
+export async function commentReplyOpportunity(
+	actorId: string,
+	postId: string,
+	rootId?: string,
+) {
+	const recent = await db.comment.findMany({
+		where: {
+			postId,
+			deletedAt: null,
+			...(rootId ? { OR: [{ id: rootId }, { parentId: rootId }] } : {}),
+		},
+		orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+		take: 8,
+		select: { id: true, authorId: true, createdAt: true },
+	})
+	const receipts = recent.length
+		? await db.agentOperationReceipt.findMany({
+				where: {
+					action: 'comment',
+					createdAt: { gte: recent.at(-1)!.createdAt },
+					actorId: {
+						in: [...new Set(recent.map((comment) => comment.authorId))],
+					},
+				},
+				select: { result: true },
+			})
+		: []
+	const automatedIds = new Set(
+		receipts.map(
+			(receipt) => (JSON.parse(receipt.result) as { id?: string }).id,
+		),
+	)
+	let consecutive = 0
+	let ownReplies = 0
+	for (const comment of recent) {
+		if (!automatedIds.has(comment.id)) break
+		consecutive++
+		if (comment.authorId === actorId) ownReplies++
+	}
+	return {
+		mayReply:
+			(!recent.length || recent[0]?.authorId !== actorId) &&
+			consecutive < 6 &&
+			ownReplies < 3,
+		consecutiveAgentComments: consecutive,
+	}
+}
 export async function agentContext(
 	actorId: string,
 	inputTrigger?: AgentTrigger,
@@ -278,6 +327,8 @@ export async function agentContext(
 						authorId: true,
 						body: true,
 						createdAt: true,
+						_count: { select: { likes: true } },
+						likes: { where: { userId: actorId }, select: { userId: true } },
 					},
 				})
 			: []
@@ -285,10 +336,16 @@ export async function agentContext(
 			now: new Date().toISOString(),
 			trigger,
 			posts: post ? [{ ...post, body: post.body.slice(0, 2000) }] : [],
-			comments: comments
-				.reverse()
-				.map((comment) => ({ ...comment, body: comment.body.slice(0, 1000) })),
+			comments: comments.reverse().map(({ _count, likes, ...comment }) => ({
+				...comment,
+				body: comment.body.slice(0, 1000),
+				likes: _count.likes,
+				liked: likes.length > 0,
+			})),
 			thread: { postId: post?.id, rootId, signalCommentId: target?.id },
+			replyOpportunity: post
+				? await commentReplyOpportunity(actorId, post.id, rootId)
+				: { mayReply: false },
 			books: [],
 			loans: [],
 			privateThreads: [],
@@ -296,8 +353,21 @@ export async function agentContext(
 		}
 	}
 	if (trigger.kind === 'social') {
-		// Social notifications are weak evidence, not permission to inspect private threads or start a conversation.
+		const senderIds = [
+			...new Set(
+				[
+					trigger.senderId,
+					...(trigger.relatedSignals ?? []).map((signal) => signal.senderId),
+				].filter((id): id is string => !!id),
+			),
+		]
+		const socialActors = await db.user.findMany({
+			where: { id: { in: senderIds } },
+			select: { id: true, name: true, campus: true, bio: true },
+		})
 		return {
+			socialActors,
+			friendRequests: await listFriendRequests(actorId),
 			now: new Date().toISOString(),
 			trigger,
 			posts: [],
@@ -326,6 +396,8 @@ export async function agentContext(
 		id: p.id,
 		authorId: p.author.id,
 		createdAt: p.createdAt,
+		viewer: p.viewer,
+		stats: p.stats,
 		activity: p.activity
 			? {
 					id: p.activity.id,
@@ -374,15 +446,16 @@ export async function agentContext(
 			authorId: true,
 			body: true,
 			createdAt: true,
+			_count: { select: { likes: true } },
+			likes: { where: { userId: actorId }, select: { userId: true } },
 		},
 	})
 	const [friendships, following] = await Promise.all([
 		db.friendship.findMany({
 			where: {
-				status: 'ACCEPTED',
 				OR: [{ requesterId: actorId }, { recipientId: actorId }],
 			},
-			select: { requesterId: true, recipientId: true },
+			select: { id: true, requesterId: true, recipientId: true, status: true },
 		}),
 		db.follow.findMany({
 			where: { followerId: actorId },
@@ -390,9 +463,9 @@ export async function agentContext(
 		}),
 	])
 	const friendIds = new Set(
-		friendships.map((f) =>
-			f.requesterId === actorId ? f.recipientId : f.requesterId,
-		),
+		friendships
+			.filter((f) => f.status === 'ACCEPTED')
+			.map((f) => (f.requesterId === actorId ? f.recipientId : f.requesterId)),
 	)
 	const followingIds = new Set(following.map((f) => f.followingId))
 	const relationships = [
@@ -402,6 +475,10 @@ export async function agentContext(
 		isSelf: userId === actorId,
 		isFriend: friendIds.has(userId),
 		isFollowing: followingIds.has(userId),
+		friendship:
+			friendships.find(
+				(f) => f.requesterId === userId || f.recipientId === userId,
+			) ?? null,
 	}))
 
 	const knownContacts = (await listConversations(actorId))
@@ -478,7 +555,26 @@ export async function agentContext(
 	return {
 		now: new Date().toISOString(),
 		posts: posts.map((p) => ({ ...p, body: p.body.slice(0, 2000) })),
-		comments,
+		comments: comments.map(({ _count, likes, ...comment }) => ({
+			...comment,
+			likes: _count.likes,
+			liked: likes.length > 0,
+		})),
+		friendRequests: await listFriendRequests(actorId),
+		commentReplyOpportunities: await Promise.all(
+			[
+				...new Set(comments.map((comment) => comment.parentId ?? comment.id)),
+			].map(async (rootId) => ({
+				rootId,
+				...(await commentReplyOpportunity(
+					actorId,
+					comments.find(
+						(comment) => (comment.parentId ?? comment.id) === rootId,
+					)!.postId,
+					rootId,
+				)),
+			})),
+		),
 		relationships,
 		privateThreads: [],
 		privateContacts,
@@ -544,6 +640,8 @@ export async function performAgentOperation(op: AgentOperation) {
 			'like',
 			'favorite',
 			'follow',
+			'friend',
+			'accept',
 			'comment',
 			'post',
 			'message',
@@ -562,9 +660,9 @@ export async function performAgentOperation(op: AgentOperation) {
 	)
 		fail('AGENT_TRIGGER_ACTION_MISMATCH', 422)
 	if (trigger.kind === 'comment') {
-		if (!['comment', 'skip'].includes(d.action))
+		if (!['comment', 'like', 'skip'].includes(d.action))
 			fail('AGENT_TRIGGER_ACTION_MISMATCH', 422)
-		if (d.action === 'comment') {
+		if (d.action === 'comment' || d.action === 'like') {
 			const target =
 				trigger.targetType === 'comment'
 					? await db.comment.findUnique({ where: { id: trigger.targetId } })
@@ -573,23 +671,64 @@ export async function performAgentOperation(op: AgentOperation) {
 				target?.postId ??
 				(trigger.targetType === 'post' ? trigger.targetId : undefined)
 			if (
+				d.action === 'comment' &&
+				postId &&
+				!(
+					await commentReplyOpportunity(
+						actor.id,
+						postId,
+						target?.parentId ?? target?.id,
+					)
+				).mayReply
+			)
+				fail('AGENT_COMMENT_TURN_LIMIT', 409)
+			if (d.action === 'like' && d.targetType === 'comment') {
+				const liked = await db.comment.findUnique({
+					where: { id: text(d.targetId, 'targetId', 100) },
+				})
+				const rootId = target?.parentId ?? target?.id
+				if (
+					!postId ||
+					!liked ||
+					liked.deletedAt ||
+					liked.postId !== postId ||
+					(rootId && liked.id !== rootId && liked.parentId !== rootId)
+				)
+					fail('AGENT_TRIGGER_ACTION_MISMATCH', 422)
+			} else if (
 				!postId ||
 				d.targetId !== postId ||
-				(target && d.parentId !== (target.parentId ?? target.id))
+				(d.action === 'comment' &&
+					target &&
+					d.parentId !== (target.parentId ?? target.id))
 			)
 				fail('AGENT_TRIGGER_ACTION_MISMATCH', 422)
 		}
 	}
-	if (
-		trigger.kind === 'social' &&
-		(!['skip', 'follow'].includes(d.action) ||
-			(d.action !== 'skip' &&
-				d.targetId !== trigger.senderId &&
-				!trigger.relatedSignals?.some(
-					(signal) => signal.senderId === d.targetId,
-				)))
-	)
-		fail('AGENT_TRIGGER_ACTION_MISMATCH', 422)
+	if (trigger.kind === 'social' && d.action !== 'skip') {
+		if (!['follow', 'friend', 'accept'].includes(d.action))
+			fail('AGENT_TRIGGER_ACTION_MISMATCH', 422)
+		const senderIds = new Set([
+			trigger.senderId,
+			...(trigger.relatedSignals ?? []).map((signal) => signal.senderId),
+		])
+		if (d.action === 'accept') {
+			const request = await db.friendship.findUnique({
+				where: { id: text(d.targetId, 'targetId', 100) },
+			})
+			if (
+				!request ||
+				request.recipientId !== actor.id ||
+				!senderIds.has(request.requesterId)
+			)
+				fail('AGENT_TRIGGER_ACTION_MISMATCH', 422)
+		} else if (!senderIds.has(d.targetId))
+			fail('AGENT_TRIGGER_ACTION_MISMATCH', 422)
+	}
+	if (d.targetType !== undefined && !['post', 'comment'].includes(d.targetType))
+		fail('VALIDATION_FAILED', 422)
+	if (d.targetType === 'comment' && d.action !== 'like')
+		fail('VALIDATION_FAILED', 422)
 	if (d.action === 'post') {
 		const lastPost = await db.post.findFirst({
 			where: { authorId: actor.id },
@@ -696,18 +835,32 @@ export async function performAgentOperation(op: AgentOperation) {
 			{ status: d.action === 'read' ? 'READ' : 'READING' },
 			now,
 		)
-	else if (['like', 'favorite', 'follow'].includes(d.action))
+	else if (
+		['like', 'favorite', 'follow', 'friend', 'accept'].includes(d.action)
+	)
 		result = await act(
 			actor.id,
 			{
-				action: d.action as 'like' | 'favorite' | 'follow',
+				action: d.action as
+					'like' | 'favorite' | 'follow' | 'friend' | 'accept',
 				targetId: text(d.targetId, 'targetId', 100),
-				targetType: 'post',
+				targetType: d.targetType ?? 'post',
 				active: true,
 			},
 			now,
 		)
-	else if (d.action === 'comment')
+	else if (d.action === 'comment') {
+		if (
+			d.parentId &&
+			!(
+				await commentReplyOpportunity(
+					actor.id,
+					text(d.targetId, 'targetId', 100),
+					d.parentId,
+				)
+			).mayReply
+		)
+			fail('AGENT_COMMENT_TURN_LIMIT', 409)
 		result = await createComment(
 			actor.id,
 			{
@@ -718,7 +871,7 @@ export async function performAgentOperation(op: AgentOperation) {
 			},
 			'Synthetic',
 		)
-	else
+	} else
 		result = await db.$transaction(async (tx) => {
 			const prior = await tx.agentOperationReceipt.findUnique({
 				where: { id: operationId },
@@ -739,6 +892,13 @@ export async function performAgentOperation(op: AgentOperation) {
 					source: 'Synthetic',
 				},
 				select: { id: true },
+			})
+			await enqueueContentMentions(tx, {
+				authorId: actor.id,
+				targetType: 'post',
+				targetId: result.id,
+				text: `${d.title}\n${d.body}`,
+				occurredAt: now,
 			})
 			await tx.agentOperationReceipt.create({
 				data: {

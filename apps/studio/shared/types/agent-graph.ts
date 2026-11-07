@@ -29,6 +29,7 @@ export interface AgentGraphEdge {
 export interface AgentGraphEvent {
 	id: string
 	kind: 'message' | 'comment' | 'post'
+	postId: string | null
 	actorId: string
 	actorName: string
 	targetId: string | null
@@ -37,7 +38,13 @@ export interface AgentGraphEvent {
 	body: string
 	occurredAt: string
 }
+export interface AgentGraphLike {
+	id: string
+	actorId: string
+	occurredAt: string
+}
 export interface AgentGraphResponse {
+	likes: AgentGraphLike[]
 	observedAt: string
 	recentSince: string
 	recentLimit: number

@@ -5,6 +5,7 @@ import {
 	runStudioProductRequest,
 	studioProductFailure,
 	studioProductError,
+	studioProductBrowserOrigin,
 } from '../../utils/studio-product'
 export default defineEventHandler((event) => {
 	if (!import.meta.dev) return studioProductFailure(event)
@@ -22,7 +23,7 @@ export default defineEventHandler((event) => {
 				{ userId },
 			)
 		return {
-			url: `${productOrigin}/studio-login#ticket=${encodeURIComponent(data.ticket)}`,
+			url: `${studioProductBrowserOrigin(event, productOrigin)}/studio-login#ticket=${encodeURIComponent(data.ticket)}`,
 			expiresAt: data.expiresAt,
 		}
 	})

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import type { MediaAsset, PostDetail } from '@campus/contracts'
+import type { MediaAsset, PostDetail, PostComments } from '@campus/contracts'
 const props = withDefaults(
 	defineProps<{ postId: string; embedded?: boolean }>(),
 	{ embedded: false },
 )
+const commentSort = ref<'popular' | 'latest'>('popular')
 const apiError = useApiError()
 const { openAuth } = useAuthOverlay()
 const commentFormPrefix = `post-comment-${useId()}`
@@ -64,24 +65,25 @@ const draft = computed({
 const commentMedia = ref<MediaAsset[]>([])
 const uploadingComment = ref(false)
 const operationId = ref('')
+const replyAnchorId = ref<string | null>(null)
+watch(replyTo, (value) => {
+	if (!value) {
+		replyAnchorId.value = null
+	}
+})
 const replyName = computed(
 	() =>
-		data.value?.comments.find((comment) => comment.id === replyTo.value)?.author
-			.name ?? '',
+		data.value?.comments.find((comment) => comment.id === replyAnchorId.value)
+			?.author.name ?? '',
 )
 const composerExpanded = computed(
 	() =>
 		composerFocused.value ||
 		!!draft.value.trim() ||
 		!!commentMedia.value.length ||
-		!!replyTo.value ||
 		busy.value,
 )
-const composerPlaceholder = computed(() =>
-	replyTo.value
-		? t('comments.replyPlaceholder', { name: replyName.value })
-		: t('comments.joinPlaceholder'),
-)
+const composerPlaceholder = computed(() => t('comments.joinPlaceholder'))
 const commentsSection = ref<HTMLElement>()
 async function focusComments() {
 	commentsSection.value?.scrollIntoView({
@@ -103,7 +105,7 @@ function focusComposer() {
 	composerFocused.value = true
 }
 function blurComposer() {
-	if (!draft.value.trim() && !replyTo.value) composerFocused.value = false
+	if (!draft.value.trim()) composerFocused.value = false
 }
 const { fields, clear, capture } = useFieldErrors(commentFormPrefix)
 useReadingSession({ postId: String(props.postId) })
@@ -121,7 +123,7 @@ async function submit() {
 	operationId.value ||= crypto.randomUUID()
 	const submittedKey = key.value
 	const submittedBody = draft.value
-	const submittedParent = replyTo.value
+	const submittedParent = null
 	const submittedUser = user.value.id
 	busy.value = true
 	message.value = ''
@@ -142,13 +144,10 @@ async function submit() {
 		if (drafts.value[submittedKey] === submittedBody)
 			drafts.value[submittedKey] = ''
 		if (disposed) return
-		if (key.value === submittedKey && replyTo.value === submittedParent) {
-			replyTo.value = null
+		if (key.value === submittedKey) {
 			composerFocused.value = false
 		}
-		await refresh()
-		if (!disposed && error.value && user.value?.id === submittedUser)
-			message.value = t('comments.refreshPending')
+		await refreshComments()
 	} catch (failure) {
 		if (disposed || user.value?.id !== submittedUser) return
 		message.value = apiError(failure)
@@ -164,7 +163,6 @@ async function submit() {
 }
 async function chooseReply(id: string) {
 	if (
-		busy.value ||
 		!data.value?.comments.some(
 			(comment) => comment.id === id && !comment.deleted,
 		)
@@ -175,41 +173,162 @@ async function chooseReply(id: string) {
 		void openAuth()
 		return
 	}
-	replyTo.value = id
-	composerFocused.value = true
+	const comment = data.value!.comments.find((comment) => comment.id === id)!
+	replyTo.value = comment.parentId ?? comment.id
+	replyAnchorId.value = id
 	await nextTick()
-	const input = document.getElementById(commentInputId)
-	input?.focus({ preventScroll: true })
-	input?.scrollIntoView({
-		block: 'nearest',
-		behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
-			? 'instant'
-			: 'smooth',
-	})
+	const target = document.getElementById(`${commentFormPrefix}-reply-${id}`)
+	target?.querySelector('textarea')?.focus({ preventScroll: true })
+	target?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
 }
+let commentsMounted = false
+let commentsTimer: ReturnType<typeof setTimeout> | undefined
+let commentsController: AbortController | undefined
+function stopCommentsPolling() {
+	clearTimeout(commentsTimer)
+	commentsController?.abort()
+	commentsController = undefined
+}
+function scheduleCommentsPoll() {
+	clearTimeout(commentsTimer)
+	if (!disposed && commentsMounted && !document.hidden)
+		commentsTimer = setTimeout(() => {
+			void pollComments()
+		}, 3000)
+}
+function commentScrollAnchor() {
+	const section = commentsSection.value
+	if (!section) return
+	let scroller = section.parentElement
+	while (
+		scroller &&
+		!/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)
+	)
+		scroller = scroller.parentElement
+	scroller ??= document.scrollingElement as HTMLElement | null
+	if (!scroller) return
+	const bounds =
+		scroller === document.scrollingElement
+			? { top: 0, bottom: window.innerHeight }
+			: scroller.getBoundingClientRect()
+	const focused =
+		document.activeElement?.closest<HTMLElement>('[data-comment-id]')
+	const anchor =
+		focused && section.contains(focused)
+			? focused
+			: [...section.querySelectorAll<HTMLElement>('[data-comment-id]')].find(
+					(row) => {
+						const box = row.getBoundingClientRect()
+						return box.bottom > bounds.top && box.top < bounds.bottom
+					},
+				)
+	return anchor
+		? { element: anchor, top: anchor.getBoundingClientRect().top, scroller }
+		: undefined
+}
+async function loadComments() {
+	stopCommentsPolling()
+	const controller = new AbortController()
+	commentsController = controller
+	const viewerId = user.value?.id
+	const postId = props.postId
+	try {
+		const result = await $fetch<PostComments>(
+			`/api/posts/${encodeURIComponent(postId)}/comments`,
+			{
+				signal: controller.signal,
+				timeout: 8000,
+				retry: 0,
+			},
+		)
+		if (
+			disposed ||
+			controller.signal.aborted ||
+			user.value?.id !== viewerId ||
+			props.postId !== postId ||
+			!data.value
+		)
+			return false
+		if (
+			JSON.stringify(result.comments) !== JSON.stringify(data.value.comments)
+		) {
+			const anchor = commentScrollAnchor()
+			data.value = {
+				...data.value,
+				comments: result.comments,
+				post: {
+					...data.value.post,
+					stats: {
+						...data.value.post.stats,
+						comments: result.comments.filter((comment) => !comment.deleted)
+							.length,
+					},
+				},
+			}
+			await nextTick()
+			if (anchor?.element.isConnected)
+				anchor.scroller.scrollTop +=
+					anchor.element.getBoundingClientRect().top - anchor.top
+		}
+		if (message.value === t('profileComments.savedRefreshPending'))
+			message.value = ''
+		return true
+	} catch {
+		return false
+	} finally {
+		if (commentsController === controller) {
+			commentsController = undefined
+			scheduleCommentsPoll()
+		}
+	}
+}
+async function pollComments() {
+	if (disposed || !commentsMounted || document.hidden || commentsController)
+		return
+	await loadComments()
+}
+function commentsVisibilityChanged() {
+	if (document.hidden) stopCommentsPolling()
+	else void pollComments()
+}
+onMounted(() => {
+	commentsMounted = true
+	document.addEventListener('visibilitychange', commentsVisibilityChanged)
+	window.addEventListener('focus', pollComments)
+	void pollComments()
+})
+onBeforeUnmount(() => {
+	commentsMounted = false
+	stopCommentsPolling()
+	document.removeEventListener('visibilitychange', commentsVisibilityChanged)
+	window.removeEventListener('focus', pollComments)
+})
+watch(
+	() => data.value?.comments,
+	(comments) => {
+		if (
+			replyAnchorId.value &&
+			!comments?.some(
+				(comment) => comment.id === replyAnchorId.value && !comment.deleted,
+			)
+		)
+			replyTo.value = null
+	},
+	{ flush: 'sync' },
+)
 async function refreshComments() {
 	message.value = ''
-	try {
-		await refresh()
-	} catch {
+	const viewerId = user.value?.id
+	if (!(await loadComments()) && !disposed && user.value?.id === viewerId)
 		message.value = t('profileComments.savedRefreshPending')
-	}
-	if (error.value) message.value = t('profileComments.savedRefreshPending')
-	if (
-		replyTo.value &&
-		!data.value?.comments.some(
-			(comment) => comment.id === replyTo.value && !comment.deleted,
-		)
-	)
-		replyTo.value = null
 }
 function cancelReply() {
 	replyTo.value = null
-	if (!draft.value.trim()) composerFocused.value = false
 }
 watch(
 	() => user.value?.id,
 	async (currentId, previousId) => {
+		stopCommentsPolling()
 		const pending = !previousId && currentId ? pendingReplyId.value : null
 		pendingReplyId.value = null
 		replyTo.value = null
@@ -223,10 +342,11 @@ watch(
 			data.value?.comments.some((comment) => comment.id === pending)
 		)
 			await chooseReply(pending)
+		if (commentsMounted) void pollComments()
 	},
 )
 watch(
-	[draft, commentMedia, replyTo],
+	[draft, commentMedia],
 	() => {
 		if (!busy.value) operationId.value = ''
 	},
@@ -263,8 +383,18 @@ watch(
 							/>{{ data.post.author.name }}</NuxtLink
 						><time>{{ date(data.post.createdAt) }}</time>
 					</div>
-					<h1>{{ data.post.title }}</h1>
-					<div class="article-body">{{ data.post.body }}</div>
+					<h1>
+						<MentionText
+							:text="data.post.title"
+							:mentions="data.post.titleMentions"
+						/>
+					</h1>
+					<div class="article-body">
+						<MentionText
+							:text="data.post.body"
+							:mentions="data.post.bodyMentions"
+						/>
+					</div>
 					<ActivityLink
 						v-if="data.post.activity"
 						:id="data.post.activity.id"
@@ -291,14 +421,44 @@ watch(
 					class="comments-section post-comments"
 					:aria-label="t('ui.comment')"
 				>
-					<h2 class="post-comments__count">
-						{{
-							t('comments.total', {
-								count: data.comments.filter((comment) => !comment.deleted)
-									.length,
-							})
-						}}
-					</h2>
+					<div class="post-comments__heading">
+						<h2 class="post-comments__count">
+							{{
+								t('comments.total', {
+									count: data.comments.filter((comment) => !comment.deleted)
+										.length,
+								})
+							}}
+						</h2>
+						<UDropdownMenu
+							:items="[
+								{
+									label: t('comments.popular'),
+									type: 'checkbox',
+									checked: commentSort === 'popular',
+									onSelect: () => (commentSort = 'popular'),
+								},
+								{
+									label: t('comments.latest'),
+									type: 'checkbox',
+									checked: commentSort === 'latest',
+									onSelect: () => (commentSort = 'latest'),
+								},
+							]"
+							:content="{ align: 'end' }"
+						>
+							<UButton
+								variant="link"
+								color="neutral"
+								size="xs"
+								trailing-icon="i-lucide-chevron-down"
+								class="post-comments__sort"
+								:aria-label="t('comments.sort')"
+								>{{ t(`comments.${commentSort}`) }}</UButton
+							>
+						</UDropdownMenu>
+					</div>
+
 					<div class="post-comments__composer-row">
 						<span class="post-comments__composer-avatar" aria-hidden="true"
 							><UserAvatar
@@ -312,18 +472,6 @@ watch(
 							:class="{ 'is-expanded': composerExpanded }"
 							@submit.prevent="submit"
 						>
-							<div v-if="replyTo" class="post-comments__reply-context">
-								<span>{{ t('comments.replying', { name: replyName }) }}</span
-								><UButton
-									type="button"
-									variant="link"
-									color="neutral"
-									size="xs"
-									:disabled="busy"
-									@click="cancelReply"
-									>{{ t('ui.cancel') }}</UButton
-								>
-							</div>
 							<UFormField
 								class="post-comments__field"
 								:label="t('ui.comment')"
@@ -383,16 +531,35 @@ watch(
 							>{{ t('comments.joinPlaceholder') }}</UButton
 						>
 					</div>
+
 					<CommentThread
 						v-if="data.comments.length"
 						:key="data.post.id"
 						:comments="data.comments"
+						:sort="commentSort"
+						:reply-target-prefix="commentFormPrefix"
+						:reply-anchor-id="replyAnchorId"
 						:post-author-id="data.post.authorId"
 						:viewer-id="user?.id"
 						:busy="busy"
 						@reply="chooseReply"
 						:on-refresh="refreshComments"
-					/>
+					>
+						<template #reply>
+							<CommentReplyComposer
+								v-if="user && replyTo && replyAnchorId"
+								:key="`${user.id}:${replyAnchorId}`"
+								:post-id="postId"
+								:parent-id="replyTo"
+								:comment-id="replyAnchorId"
+								:reply-name="replyName"
+								:user="user"
+								:on-refresh="refreshComments"
+								@cancel="cancelReply"
+								@sent="cancelReply"
+							/>
+						</template>
+					</CommentThread>
 					<p v-else class="post-comments__empty">{{ t('ui.commentEmpty') }}</p>
 				</section>
 			</div>
@@ -441,8 +608,20 @@ watch(
 	background: transparent;
 	box-shadow: none;
 }
+.post-comments__heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 17px;
+}
+.post-comments__sort {
+	padding: 0;
+	color: var(--muted);
+	text-decoration: none;
+}
 .post-comments__count {
-	margin: 0 0 17px;
+	margin: 0;
 	color: var(--muted);
 	font-size: 13px;
 	font-weight: 400;
@@ -534,29 +713,6 @@ watch(
 .post-comments__entry:hover {
 	color: var(--muted);
 	background: color-mix(in srgb, var(--surface-raised) 93%, var(--muted));
-}
-.post-comments__reply-context {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 8px;
-	margin: 0 0 7px;
-	color: var(--muted);
-	font-size: 12px;
-	line-height: 1.5;
-}
-.post-comments__reply-context > span {
-	min-width: 0;
-	overflow-wrap: anywhere;
-}
-.post-comments__reply-context :deep(button) {
-	flex-shrink: 0;
-	min-height: 22px;
-	padding: 0;
-	color: var(--muted);
-	font-size: 11px;
-	font-weight: 400;
-	text-decoration: none;
 }
 .post-comments__actions {
 	display: flex;

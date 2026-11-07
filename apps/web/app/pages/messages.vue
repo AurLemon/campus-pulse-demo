@@ -5,6 +5,7 @@ import type {
 	ConversationMessages,
 	DirectMessageView,
 	NotificationView,
+	FriendRequestView,
 } from '@campus/contracts/messages'
 import type { MediaAsset } from '@campus/contracts'
 const { t } = useI18n()
@@ -28,6 +29,8 @@ function mergeConversations(rows: ConversationView[]) {
 	)
 }
 const notifications = ref<NotificationView[]>([])
+const friendRequests = ref<FriendRequestView[]>([])
+const accepting = reactive(new Set<string>())
 const selected = ref<string | null>(null)
 const category = ref('reactions')
 const mobileDetail = ref(false)
@@ -89,7 +92,13 @@ const active = computed(() =>
 	conversations.value.find((row) => row.id === selected.value),
 )
 const categories = [
+	{ id: 'mentions', icon: 'i-lucide-at-sign', kinds: ['MENTION'] },
 	{ id: 'reactions', icon: 'i-lucide-heart', kinds: ['LIKE', 'FAVORITE'] },
+	{
+		id: 'friends',
+		icon: 'i-lucide-users',
+		kinds: ['FRIEND_REQUEST', 'FRIEND_ACCEPTED'],
+	},
 	{ id: 'follows', icon: 'i-lucide-user-plus', kinds: ['FOLLOW'] },
 	{
 		id: 'comments',
@@ -124,6 +133,7 @@ async function refreshInbox() {
 	const result = await $fetch<{
 		conversations: ConversationView[]
 		notifications: NotificationView[]
+		friendRequests: FriendRequestView[]
 		conversationNextCursor: string | null
 		conversationHasMore: boolean
 	}>('/api/messages', { signal: requests.signal })
@@ -146,8 +156,27 @@ async function refreshInbox() {
 		mergeConversations([metadata])
 	}
 	notifications.value = result.notifications
+	friendRequests.value = result.friendRequests
 	inboxLoaded.value = true
 	nextInboxAt = Date.now() + 5000
+}
+async function acceptFriend(id: string) {
+	if (accepting.has(id)) return
+	const actorId = user.value?.id
+	const version = identityVersion
+	accepting.add(id)
+	error.value = ''
+	try {
+		await $fetch('/api/actions', {
+			method: 'POST',
+			body: { action: 'accept', targetId: id, active: true },
+		})
+		if (currentIdentity(actorId, version)) await refreshInbox()
+	} catch (failure) {
+		if (currentIdentity(actorId, version)) error.value = apiError(failure)
+	} finally {
+		accepting.delete(id)
+	}
 }
 async function poll() {
 	if (
@@ -496,6 +525,7 @@ watch(
 		items.value = []
 		conversations.value = []
 		notifications.value = []
+		friendRequests.value = []
 		inboxLoaded.value = false
 		draft.value = ''
 		media.value = []
@@ -546,6 +576,7 @@ watch(
 					}}</span
 					><b
 						v-if="
+							(group.id === 'friends' && friendRequests.length > 0) ||
 							notifications.some(
 								(row) => group.kinds.includes(row.kind) && !row.read,
 							)
@@ -686,7 +717,36 @@ watch(
 					</form></template
 				>
 				<div v-else-if="category" class="notifications">
-					<article v-for="row in visibleNotifications" :key="row.id">
+					<template v-if="category === 'friends'">
+						<article v-for="request in friendRequests" :key="request.id">
+							<UserAvatar
+								:src="request.requester.avatar"
+								:name="request.requester.name"
+							/>
+							<div>
+								<NuxtLink :to="`/users/${request.requesterId}`">{{
+									request.requester.name
+								}}</NuxtLink>
+								<p>{{ t('ui.requests') }}</p>
+								<time>{{ date(request.createdAt) }}</time>
+								<UButton
+									color="neutral"
+									variant="soft"
+									size="sm"
+									:loading="accepting.has(request.id)"
+									:disabled="accepting.has(request.id)"
+									@click="acceptFriend(request.id)"
+									>{{ t('ui.accept') }}</UButton
+								>
+							</div>
+						</article>
+					</template>
+					<article
+						v-for="row in visibleNotifications.filter(
+							(row) => row.kind !== 'FRIEND_REQUEST',
+						)"
+						:key="row.id"
+					>
 						<UserAvatar
 							:src="row.actor?.avatar"
 							:name="row.actor?.name ?? t('messages.deletedUser')"
@@ -698,13 +758,23 @@ watch(
 							><span v-else>{{ t('messages.deletedUser') }}</span>
 							<p>{{ t(`messages.kind${row.kind}`) }}</p>
 							<NuxtLink v-if="row.targetUrl" :to="row.targetUrl">{{
-								t('messages.view')
+								row.kind === 'MENTION'
+									? (row.targetTitle ?? t('messages.view'))
+									: t('messages.view')
 							}}</NuxtLink
 							><small v-else>{{ t('messages.unavailable') }}</small
 							><time>{{ date(row.createdAt) }}</time>
 						</div>
 					</article>
-					<p v-if="!visibleNotifications.length" class="muted">
+					<p
+						v-if="
+							!visibleNotifications.filter(
+								(row) => row.kind !== 'FRIEND_REQUEST',
+							).length &&
+							(category !== 'friends' || !friendRequests.length)
+						"
+						class="muted"
+					>
 						{{ t('messages.noNotifications') }}
 					</p>
 				</div>
@@ -948,6 +1018,10 @@ watch(
 	display: flex;
 	gap: 12px;
 	padding: 16px 0;
+}
+.notifications article > div {
+	min-width: 0;
+	overflow-wrap: anywhere;
 }
 .notifications p {
 	margin: 6px 0;

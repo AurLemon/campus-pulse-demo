@@ -48,11 +48,14 @@ export interface AgentPersona {
 	recentEvents: string[]
 }
 export interface AgentDecision {
+	targetType?: 'post' | 'comment'
 	action:
 		| 'skip'
 		| 'like'
 		| 'favorite'
 		| 'follow'
+		| 'friend'
+		| 'accept'
 		| 'comment'
 		| 'post'
 		| 'message'

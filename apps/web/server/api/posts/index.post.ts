@@ -1,6 +1,7 @@
 import { readBody } from 'h3'
 import { randomUUID } from 'node:crypto'
 import { db } from '@campus/domain/prisma'
+import { enqueueContentMentions } from '@campus/domain/mentions'
 import {
 	api,
 	actor,
@@ -59,23 +60,35 @@ export default api(async (event) => {
 		fail('VALIDATION_FAILED', 422, { posterAspect: 'INVALID_FIELD' })
 	if (posterHighlight && !title.includes(posterHighlight))
 		fail('VALIDATION_FAILED', 422, { posterHighlight: 'INVALID_FIELD' })
-	return db.post.create({
-		select: { id: true },
-		data: {
-			id: randomUUID(),
+	const body = text(b.body, 'body', 20000)
+	const now = await businessNow()
+	return db.$transaction(async (tx) => {
+		const post = await tx.post.create({
+			select: { id: true },
+			data: {
+				id: randomUUID(),
+				authorId: user.id,
+				activityId,
+				title,
+				posterTemplate,
+				posterAspect,
+				posterHighlight,
+				body,
+				tags: JSON.stringify(tags(b.tags ?? [])),
+				purpose: String(purpose),
+				mediaIds: JSON.stringify(mediaIds),
+				kind: b.kind === 'ARTICLE' ? 'ARTICLE' : 'TEXT',
+				createdAt: now,
+				source: 'Real',
+			},
+		})
+		await enqueueContentMentions(tx, {
 			authorId: user.id,
-			activityId,
-			title,
-			posterTemplate,
-			posterAspect,
-			posterHighlight,
-			body: text(b.body, 'body', 20000),
-			tags: JSON.stringify(tags(b.tags ?? [])),
-			purpose: String(purpose),
-			mediaIds: JSON.stringify(mediaIds),
-			kind: b.kind === 'ARTICLE' ? 'ARTICLE' : 'TEXT',
-			createdAt: await businessNow(),
-			source: 'Real',
-		},
+			targetType: 'post',
+			targetId: post.id,
+			text: `${title}\n${body}`,
+			occurredAt: now,
+		})
+		return post
 	})
 })

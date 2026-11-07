@@ -117,6 +117,7 @@ async function runJob(
 	else {
 		const context = await request<{
 			posts: Array<{ id: string; title: string }>
+			replyOpportunity?: { mayReply: boolean }
 			books: Array<{ id: string; title: string }>
 			privateThreads: Array<{
 				conversationId: string
@@ -159,7 +160,8 @@ async function runJob(
 		const prompt = buildAgentPrompt(actor, context, memories, requestTrigger)
 		const noTarget =
 			(trigger.kind === 'direct-message' && !context.privateThreads.length) ||
-			(trigger.kind === 'comment' && !context.posts.length)
+			(trigger.kind === 'comment' &&
+				(!context.posts.length || context.replyOpportunity?.mayReply === false))
 		const output = noTarget
 			? JSON.stringify({ action: 'skip' })
 			: await runWritingBatch(`runtime-${id}`, prompt, {
@@ -458,7 +460,7 @@ try {
 						kind:
 							signal.kind === 'DirectMessageCreated'
 								? 'direct-message'
-								: signal.kind === 'CommentCreated'
+								: ['CommentCreated', 'MentionCreated'].includes(signal.kind)
 									? 'comment'
 									: 'social',
 						recipientId: signal.actorId,
@@ -499,9 +501,9 @@ try {
 						(age >= 500 || Date.now() - Date.parse(first.createdAt) >= 1500)
 					)
 				if (backgroundActive >= backgroundLimit) return false
-				const cooldown = kind === 'comment' ? 10000 : 120000
+				const cooldown = 10000
 				return (
-					age >= (kind === 'comment' ? 1500 : 15000) &&
+					age >= 1500 &&
 					(!last.lastRunAt ||
 						Date.now() - Date.parse(last.lastRunAt) >= cooldown)
 				)

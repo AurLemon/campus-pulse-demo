@@ -1,15 +1,33 @@
 <script setup lang="ts">
 import type { CommentView } from '@campus/contracts'
+import { rankComments } from '@campus/recommendation'
 const props = withDefaults(
 	defineProps<{
 		comments: CommentView[]
 		postAuthorId: string
 		viewerId?: string
 		onRefresh?: () => Promise<void>
+		replyTargetPrefix: string
+		replyAnchorId?: string | null
+		sort?: 'popular' | 'latest'
 		busy?: boolean
 	}>(),
-	{ busy: false, viewerId: undefined, onRefresh: undefined },
+	{
+		busy: false,
+		viewerId: undefined,
+		onRefresh: undefined,
+		sort: 'popular',
+		replyAnchorId: null,
+	},
 )
+const { openAuth } = useAuthOverlay()
+const rankingTime = ref(Date.now())
+const liking = reactive(new Set<string>())
+const bursting = reactive(new Set<string>())
+const reactionOverrides = reactive(
+	new Map<string, { likes: number; liked: boolean }>(),
+)
+const burstTimers = new Set<ReturnType<typeof setTimeout>>()
 const emit = defineEmits<{ reply: [commentId: string] }>()
 const { t } = useI18n(),
 	date = useCampusDate(),
@@ -22,7 +40,7 @@ const expanded = ref<string[]>([]),
 	message = ref('')
 const editInputId = `comment-edit-${useId()}`
 const roots = computed(() =>
-	props.comments.filter((comment) => !comment.parentId),
+	rankComments(props.comments, rankingTime.value, props.sort),
 )
 const repliesByRoot = computed(() => {
 	const groups = new Map<string, CommentView[]>()
@@ -39,16 +57,68 @@ function replies(rootId: string) {
 }
 function rows(root: CommentView) {
 	const group = replies(root.id)
-	return [
-		root,
-		...(expanded.value.includes(root.id) ? group : group.slice(0, 1)),
-	]
+	const visible = expanded.value.includes(root.id)
+		? group
+		: group.filter(
+				(comment, index) => index === 0 || comment.id === props.replyAnchorId,
+			)
+	return [root, ...visible]
 }
 function toggle(rootId: string) {
 	expanded.value = expanded.value.includes(rootId)
 		? expanded.value.filter((id) => id !== rootId)
 		: [...expanded.value, rootId]
 }
+function reaction(comment: CommentView) {
+	return (
+		reactionOverrides.get(comment.id) ?? {
+			likes: comment.stats?.likes ?? 0,
+			liked: comment.viewer?.liked ?? false,
+		}
+	)
+}
+async function toggleLike(comment: CommentView) {
+	if (!props.viewerId) {
+		await openAuth()
+		return
+	}
+	if (liking.has(comment.id) || comment.deleted) return
+	const viewer = props.viewerId
+	liking.add(comment.id)
+	message.value = ''
+	try {
+		const result = await $fetch<{ likes: number; liked: boolean }>(
+			'/api/actions',
+			{
+				method: 'POST',
+				body: {
+					action: 'like',
+					targetType: 'comment',
+					targetId: comment.id,
+					active: !reaction(comment).liked,
+				},
+			},
+		)
+		if (viewer !== props.viewerId) return
+		reactionOverrides.set(comment.id, result)
+		if (result.liked) {
+			bursting.add(comment.id)
+			const timer = setTimeout(() => {
+				bursting.delete(comment.id)
+				burstTimers.delete(timer)
+			}, 700)
+			burstTimers.add(timer)
+		}
+		await props.onRefresh?.()
+	} catch (error) {
+		if (viewer === props.viewerId) message.value = apiError(error)
+	} finally {
+		liking.delete(comment.id)
+	}
+}
+onBeforeUnmount(() => {
+	for (const timer of burstTimers) clearTimeout(timer)
+})
 function canManage(comment: CommentView) {
 	return (
 		!!props.viewerId && props.viewerId === comment.authorId && !comment.deleted
@@ -121,6 +191,8 @@ async function confirmDelete() {
 watch(
 	() => props.viewerId,
 	() => {
+		reactionOverrides.clear()
+		bursting.clear()
 		editingId.value = null
 		deletingId.value = null
 		editingBody.value = ''
@@ -130,6 +202,8 @@ watch(
 watch(
 	() => props.comments,
 	(comments, previous) => {
+		reactionOverrides.clear()
+		rankingTime.value = Date.now()
 		const previousIds = new Set(previous?.map((comment) => comment.id) ?? [])
 		for (const comment of comments)
 			if (
@@ -149,11 +223,15 @@ watch(
 )
 </script>
 <template>
+	<p v-if="message && !editingId && !deletingId" class="error" role="alert">
+		{{ message }}
+	</p>
 	<ol class="comment-thread">
 		<li v-for="root in roots" :key="root.id" class="comment-thread__item">
 			<div
 				v-for="comment in rows(root)"
 				:key="comment.id"
+				:data-comment-id="comment.id"
 				class="comment-thread__row"
 				:class="{ 'comment-thread__row--reply': !!comment.parentId }"
 			>
@@ -239,7 +317,14 @@ watch(
 						class="comment-thread__body"
 						:class="{ 'comment-thread__deleted': comment.deleted }"
 					>
-						{{ comment.deleted ? t('profileComments.deleted') : comment.body }}
+						<template v-if="comment.deleted">{{
+							t('profileComments.deleted')
+						}}</template
+						><MentionText
+							v-else
+							:text="comment.body"
+							:mentions="comment.mentions"
+						/>
 					</p>
 					<div
 						v-if="!comment.deleted && comment.media?.length"
@@ -266,9 +351,24 @@ watch(
 							size="xs"
 							class="comment-thread__reply"
 							:disabled="busy || !!mutationId"
-							@click="emit('reply', root.id)"
+							@click="emit('reply', comment.id)"
 							>{{ t('comments.reply') }}</UButton
 						>
+						<HeartReactionButton
+							v-if="!comment.deleted"
+							class="comment-thread__like"
+							:liked="reaction(comment).liked"
+							:count="reaction(comment).likes"
+							:busy="liking.has(comment.id)"
+							:bursting="bursting.has(comment.id)"
+							@click="toggleLike(comment)"
+						/>
+					</div>
+					<div
+						:id="`${replyTargetPrefix}-reply-${comment.id}`"
+						class="comment-thread__reply-target"
+					>
+						<slot v-if="comment.id === replyAnchorId" name="reply" />
 					</div>
 				</div>
 			</div>
@@ -325,6 +425,22 @@ watch(
 	</UModal>
 </template>
 <style scoped>
+.comment-thread__reply-target:empty {
+	display: none;
+}
+.comment-thread__reply-target:not(:empty) {
+	margin-top: 12px;
+}
+.comment-thread__like {
+	margin-left: auto;
+	font-size: 11px;
+	min-height: 24px;
+}
+.comment-thread__like :deep(svg) {
+	width: 15px;
+	height: 15px;
+}
+
 .comment-thread__media {
 	display: flex;
 	flex-wrap: wrap;

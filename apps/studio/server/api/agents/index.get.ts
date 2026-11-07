@@ -9,6 +9,7 @@ import {
 	type LedgerEntry,
 } from '../../../../../tools/content/budget'
 import { studioDatabaseUrl } from '../../utils/snapshot'
+import { studioProductBrowserOrigin } from '../../utils/studio-product'
 async function originalFailure(entry: LedgerEntry | undefined) {
 	if (!entry) return null
 	if (entry.error?.startsWith('PI_USAGE_UNKNOWN:')) return entry.error
@@ -60,6 +61,37 @@ export default defineEventHandler(async (event) => {
 			const d = job.decision,
 				target = d?.action === 'post' ? job.result?.id : d?.targetId
 			if (!target || !d) continue
+			if (d.action === 'like' && d.targetType === 'comment') {
+				const comment = database
+					.prepare(
+						'SELECT c.postId,p.title FROM Comment c JOIN Post p ON p.id=c.postId WHERE c.id=?',
+					)
+					.get(String(target)) as { postId: string; title: string } | undefined
+				job.targetTitle = comment?.title ?? null
+				job.targetUrl = comment
+					? `/?post=${encodeURIComponent(comment.postId)}`
+					: null
+				continue
+			}
+			if (d.action === 'friend' || d.action === 'accept') {
+				const person =
+					d.action === 'accept'
+						? (database
+								.prepare(
+									'SELECT u.id,u.name FROM Friendship f JOIN User u ON u.id=f.requesterId WHERE f.id=?',
+								)
+								.get(String(target)) as
+								{ id: string; name: string } | undefined)
+						: (database
+								.prepare('SELECT id,name FROM User WHERE id=?')
+								.get(String(target)) as
+								{ id: string; name: string } | undefined)
+				job.targetTitle = person?.name ?? null
+				job.targetUrl = person
+					? `/users/${encodeURIComponent(person.id)}`
+					: null
+				continue
+			}
 			const table =
 				d.action === 'follow'
 					? 'User'
@@ -81,7 +113,7 @@ export default defineEventHandler(async (event) => {
 	}
 	return {
 		...state,
-		productOrigin: productOrigin(),
+		productOrigin: studioProductBrowserOrigin(event, productOrigin()),
 		budget: await readTaskBudget(),
 	}
 })

@@ -5,6 +5,7 @@ import { fail, text } from './validation.ts'
 import { publicUser } from './views.ts'
 import type {
 	CommunityEvent,
+	FriendRequestView,
 	DirectMessageView,
 	ConversationView,
 	ConversationPage,
@@ -369,11 +370,17 @@ export async function listNotifications(
 		rows.map(async (row) => {
 			const actor = await db.user.findUnique({ where: { id: row.actorId } })
 			let targetUrl: string | null = null
-			if (
-				row.targetType === 'post' &&
-				(await db.post.findUnique({ where: { id: row.targetId } }))
-			)
-				targetUrl = `/posts/${row.targetId}`
+			let targetTitle: string | null = null
+			if (row.targetType === 'post') {
+				const post = await db.post.findUnique({
+					where: { id: row.targetId },
+					select: { title: true },
+				})
+				if (post) {
+					targetUrl = `/posts/${row.targetId}`
+					targetTitle = post.title
+				}
+			}
 			if (
 				row.targetType === 'activity' &&
 				(await db.activity.findUnique({ where: { id: row.targetId } }))
@@ -383,9 +390,12 @@ export async function listNotifications(
 			if (row.targetType === 'comment') {
 				const comment = await db.comment.findUnique({
 					where: { id: row.targetId },
+					include: { post: { select: { title: true } } },
 				})
-				if (comment && !comment.deletedAt)
+				if (comment && !comment.deletedAt) {
 					targetUrl = `/posts/${comment.postId}`
+					targetTitle = comment.post.title
+				}
 			}
 			return {
 				id: row.id,
@@ -395,6 +405,7 @@ export async function listNotifications(
 				targetId: row.targetId,
 				targetAvailable: !!targetUrl,
 				targetUrl,
+				targetTitle,
 				createdAt: row.createdAt,
 				read: !!row.readAt,
 			}
@@ -435,4 +446,19 @@ export async function markAllNotificationsRead(userId: string) {
 		data: { readAt: now },
 	})
 	return { ok: true }
+}
+
+export async function listFriendRequests(
+	userId: string,
+): Promise<FriendRequestView[]> {
+	const requests = await db.friendship.findMany({
+		where: { recipientId: userId, status: 'PENDING' },
+		include: { requester: true },
+		orderBy: { createdAt: 'desc' },
+	})
+	return requests.map(({ requester, ...request }) => ({
+		...request,
+		status: 'PENDING',
+		requester: publicUser(requester),
+	}))
 }

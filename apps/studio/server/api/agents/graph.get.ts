@@ -8,6 +8,7 @@ import type {
 	AgentGraphEdgeKind,
 	AgentGraphState,
 	AgentGraphEvent,
+	AgentGraphLike,
 } from '../../../shared/types/agent-graph'
 interface RelationshipRow {
 	source: string
@@ -21,6 +22,7 @@ interface EventJobRow {
 	contentId: string | null
 }
 interface EventContentRow {
+	postId: string | null
 	actorName: string
 	targetId: string | null
 	targetName: string | null
@@ -138,13 +140,13 @@ export default defineEventHandler((event): AgentGraphResponse => {
 			// A receipt alone is not authority: verify author and current product row.
 			const contentQueries = {
 				message: db.prepare(
-					`SELECT a.name AS actorName,other.id AS targetId,other.name AS targetName,NULL AS title,m.body,m.createdAt AS occurredAt FROM DirectMessage m JOIN User a ON a.id=m.senderId AND a.source='Synthetic' JOIN Conversation c ON c.id=m.conversationId JOIN User other ON other.id=CASE WHEN c.userLow=m.senderId THEN c.userHigh ELSE c.userLow END WHERE m.id=? AND m.senderId=?`,
+					`SELECT NULL AS postId,a.name AS actorName,other.id AS targetId,other.name AS targetName,NULL AS title,m.body,m.createdAt AS occurredAt FROM DirectMessage m JOIN User a ON a.id=m.senderId AND a.source='Synthetic' JOIN Conversation c ON c.id=m.conversationId JOIN User other ON other.id=CASE WHEN c.userLow=m.senderId THEN c.userHigh ELSE c.userLow END WHERE m.id=? AND m.senderId=?`,
 				),
 				comment: db.prepare(
-					`SELECT a.name AS actorName,target.id AS targetId,target.name AS targetName,p.title,c.body,c.createdAt AS occurredAt FROM Comment c JOIN User a ON a.id=c.authorId AND a.source='Synthetic' JOIN Post p ON p.id=c.postId LEFT JOIN Comment parent ON parent.id=c.parentId JOIN User target ON target.id=COALESCE(parent.authorId,p.authorId) WHERE c.id=? AND c.authorId=? AND c.deletedAt IS NULL`,
+					`SELECT p.id AS postId,a.name AS actorName,target.id AS targetId,target.name AS targetName,p.title,c.body,c.createdAt AS occurredAt FROM Comment c JOIN User a ON a.id=c.authorId AND a.source='Synthetic' JOIN Post p ON p.id=c.postId LEFT JOIN Comment parent ON parent.id=c.parentId JOIN User target ON target.id=COALESCE(parent.authorId,p.authorId) WHERE c.id=? AND c.authorId=? AND c.deletedAt IS NULL`,
 				),
 				post: db.prepare(
-					`SELECT a.name AS actorName,NULL AS targetId,NULL AS targetName,p.title,p.body,p.createdAt AS occurredAt FROM Post p JOIN User a ON a.id=p.authorId AND a.source='Synthetic' WHERE p.id=? AND p.authorId=?`,
+					`SELECT p.id AS postId,a.name AS actorName,NULL AS targetId,NULL AS targetName,p.title,p.body,p.createdAt AS occurredAt FROM Post p JOIN User a ON a.id=p.authorId AND a.source='Synthetic' WHERE p.id=? AND p.authorId=?`,
 				),
 			}
 			const events: AgentGraphEvent[] = eventJobs.flatMap((job) => {
@@ -157,7 +159,21 @@ export default defineEventHandler((event): AgentGraphResponse => {
 					? [{ id: job.id, kind: job.action, actorId: job.actorId, ...content }]
 					: []
 			})
+			const likesSince = new Date(Date.parse(observedAt) - 10_000).toISOString()
+			const likes = (
+				db
+					.prepare(
+						`
+				SELECT 'post:' || id AS id,userId AS actorId,createdAt AS occurredAt FROM State WHERE kind='LIKE' AND postId IS NOT NULL AND createdAt>=?
+				UNION ALL
+				SELECT 'comment:' || userId || ':' || commentId || ':' || createdAt AS id,userId AS actorId,createdAt AS occurredAt FROM CommentLike WHERE createdAt>=?
+				ORDER BY occurredAt DESC LIMIT 200
+			`,
+					)
+					.all(likesSince, likesSince) as AgentGraphLike[]
+			).filter((like) => ids.has(like.actorId))
 			return {
+				likes,
 				observedAt,
 				recentSince,
 				recentLimit,

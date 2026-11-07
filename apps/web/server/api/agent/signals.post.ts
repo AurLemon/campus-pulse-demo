@@ -70,7 +70,7 @@ export default api(async (event) => {
 								kind:
 									row.kind === 'DirectMessageCreated'
 										? 'direct-message'
-										: row.kind === 'CommentCreated'
+										: ['CommentCreated', 'MentionCreated'].includes(row.kind)
 											? 'comment'
 											: 'social',
 								recipientId: payload.recipientId,
