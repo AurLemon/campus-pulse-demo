@@ -12,6 +12,7 @@
 	"include": [
 		"../tools/**/*.ts",
 		"../packages/**/*.ts",
+		"../tests/**/*.ts",
 		"database.ts",
 		"dev.ts",
 		"dev-ports.ts",
