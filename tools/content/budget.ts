@@ -622,7 +622,7 @@ export async function reserveUnconfirmedCacheDiscounts() {
 	})
 }
 
-/** Explicit Studio action only. Never change limits, entries or anomaly stops. */
+/** Used by Studio controls and worker startup. Preserve limits, entries and anomaly stops. */
 export async function setTaskBudgetUnlimited(enabled: boolean) {
 	await withLedger(async (ledger) => {
 		const group = ledger.taskBudgets?.[CURRENT_TASK_BUDGET]

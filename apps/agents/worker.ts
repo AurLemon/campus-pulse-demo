@@ -16,6 +16,7 @@ import {
 } from './store.ts'
 import { request } from './client.ts'
 import { syncPersonas } from './personas.ts'
+import { startAutomaticScheduling } from './startup.ts'
 import { buildAgentPrompt } from './prompt.ts'
 import { MAX_JOB_RETRIES, writingBatchId } from './retry-policy.ts'
 import {
@@ -93,6 +94,7 @@ const sampleSize = sampleArgument
 	: 1
 const single = process.argv.includes('--once') || !!sampleArgument
 const syncOnly = process.argv.includes('--sync-only')
+if (!single && !syncOnly) await startAutomaticScheduling()
 const maximum = Number(
 	process.env.CAMPUS_AGENT_MAX_DECISIONS ?? (single ? '1' : '0'),
 )

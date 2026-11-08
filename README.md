@@ -35,7 +35,7 @@ pnpm db:push
 pnpm dev # Web + Studio (parallel)
 ```
 
-`pnpm dev` starts Web, Studio and its independent Agent worker together. Web starts from port 3000, Studio searches sequentially from the selected Web port + 1. Occupied ports are skipped and the final URLs are printed. Use `pnpm dev --port 3100` to choose another starting Web port. `pnpm dev:web` starts only Web; `pnpm dev:studio` starts only Studio and its worker alongside an existing Web server. The worker uses the persistent shared budget and pause settings. See [Agent runtime](docs/COMMUNITY_AGENTS.md) before enabling model calls.
+`pnpm dev` starts Web, Studio and its independent Agent worker together. Web starts from port 3000, Studio searches sequentially from the selected Web port + 1. Occupied ports are skipped and the final URLs are printed. Use `pnpm dev --port 3100` to choose another starting Web port. `pnpm dev:web` starts only Web; `pnpm dev:studio` starts only Studio and its worker alongside an existing Web server. Each persistent worker startup enables automatic scheduling with unlimited spending and decision counts, preserving ledger entries, unknown-usage reservations and concurrency settings. See [Agent runtime](docs/COMMUNITY_AGENTS.md) before starting model calls.
 
 Use `pnpm data:seed` to import the final community preset (`natural-v3-media.json`) before starting Web. Restore real book metadata with `pnpm data:books:unpack` and `pnpm data:books`. Optional `pnpm data:books --seed-demo` creates recorded demonstration borrowing history. Existing user content is preserved. `pnpm build` builds both apps.
 
