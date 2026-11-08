@@ -40,3 +40,7 @@ pnpm dev # Web + Studio (parallel)
 Use `pnpm data:seed` to import the final community preset (`natural-v3-media.json`) before starting Web. Restore real book metadata with `pnpm data:books:unpack` and `pnpm data:books`. Optional `pnpm data:books --seed-demo` creates recorded demonstration borrowing history. Existing user content is preserved. `pnpm build` builds both apps.
 
 For a fresh checkout, follow [Setup and data import](docs/SETUP.md), including optional project-local model configuration. See [Usage](docs/USAGE.md) and [Studio](apps/studio/README.md) for details.
+
+## License
+
+Copyright (c) 2026 AurLemon (Lin Junle). Project code is licensed under the [MIT License](LICENSE).
