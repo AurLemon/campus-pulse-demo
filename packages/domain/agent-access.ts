@@ -13,7 +13,13 @@ import { act } from './services/action.service.ts'
 import { createComment } from './services/comment.service.ts'
 import { enqueueContentMentions } from './mentions.ts'
 import { feed } from './feed.ts'
-import { setBookState, changeBookLoan } from './books.ts'
+import {
+	setBookState,
+	changeBookLoan,
+	readBookSnapshot,
+	bookView,
+} from './books.ts'
+import { recommendBooks } from '../recommendation/books.ts'
 import {
 	getConversationMessages,
 	sendDirectMessage,
@@ -691,12 +697,6 @@ export async function agentContext(
 		}
 	}
 
-	const interests = Object.entries(
-		JSON.parse(actor.interests) as Record<string, number>,
-	)
-		.filter(([, weight]) => weight > 0)
-		.map(([tag]) => tag)
-
 	const recommendation = await feed({
 		userId: actorId,
 		tab: 'recommended',
@@ -731,21 +731,60 @@ export async function agentContext(
 			.filter((asset) => ['Generated', 'Stock'].includes(asset.origin))
 			.map((asset) => asset.alt.slice(0, 300)),
 	}))
-	const books = await db.book.findMany({
-		take: 8,
-		select: { id: true, title: true, tags: true },
+	const now = new Date().toISOString()
+	const bookSnapshot = await readBookSnapshot(db, now)
+	const bookRecommendations = recommendBooks({
+		snapshot: bookSnapshot,
+		userId: actorId,
+		now,
+		resultCount: 8,
 	})
-	const relevantBooks = books
-		.sort(
-			(a, b) =>
-				JSON.parse(b.tags).filter((t: string) => interests.includes(t)).length -
-				JSON.parse(a.tags).filter((t: string) => interests.includes(t)).length,
-		)
-		.slice(0, 4)
-	const loans = await db.bookLoan.findMany({
-		where: { userId: actorId, returnedAt: null },
-		select: { bookId: true, dueAt: true },
-	})
+	const [loans, readingStates] = await Promise.all([
+		db.bookLoan.findMany({
+			where: { userId: actorId, returnedAt: null },
+			select: { bookId: true, dueAt: true },
+		}),
+		db.bookState.findMany({
+			where: { userId: actorId, status: { in: ['WANT', 'READING'] } },
+			orderBy: { updatedAt: 'desc' },
+			take: 8,
+			select: { bookId: true },
+		}),
+	])
+	const bookIds = [
+		...new Set([
+			...loans.map((loan) => loan.bookId),
+			...readingStates.map((state) => state.bookId),
+			...bookRecommendations.items.map((book) => book.id),
+		]),
+	]
+	const books = await db.book.findMany({ where: { id: { in: bookIds } } })
+	const relevantBooks = await Promise.all(
+		bookIds.map(async (id) => {
+			const book = books.find((candidate) => candidate.id === id)!
+			const view = await bookView(db, book, actorId)
+			return {
+				id: view.id,
+				title: view.title,
+				authors: view.authors,
+				description: view.description.slice(0, 500),
+				tags: view.tags,
+				status: view.status,
+				favorite: view.favorite,
+				available: view.available,
+				loan: view.loan,
+				allowedActions: [
+					...(view.loan
+						? ['return']
+						: view.available > 0 && loans.length < 5
+							? ['borrow']
+							: []),
+					...(['NONE', 'WANT'].includes(view.status) ? ['reading'] : []),
+					...(view.status === 'READING' ? ['read'] : []),
+				],
+			}
+		}),
+	)
 
 	const comments = await db.comment.findMany({
 		where: { postId: { in: posts.map((p) => p.id) }, deletedAt: null },

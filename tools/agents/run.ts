@@ -76,6 +76,9 @@ if (process.argv.includes('--read-only'))
 	throw new Error(
 		'SDK_CONTENT_RUNNER_IS_TOOL_FREE: use explicit reviewed input instead of file access',
 	)
+const systemPrompt = process.env.CAMPUS_AGENT_SYSTEM_PROMPT_FILE
+	? await readFile(resolve(process.env.CAMPUS_AGENT_SYSTEM_PROMPT_FILE), 'utf8')
+	: 'Complete only the supplied bounded writing task. Return the requested JSON and stop. No tools or external context are available.'
 const access = await readGlobalAccess()
 const model = process.env.CAMPUS_AGENT_MODEL || supportedModel
 if (model !== supportedModel)
@@ -123,6 +126,8 @@ const metadata: {
 	transportError?: string
 	payloadMaxTokens?: unknown
 	wire?: Record<string, unknown>
+	messageRoles?: unknown[]
+	hasInstructions?: boolean
 } = {
 	sdk: 'pi-model-runtime',
 	sdkSource: sdkLocation.source,
@@ -175,8 +180,7 @@ try {
 	const stream = runtime.streamSimple(
 		taskModel,
 		{
-			systemPrompt:
-				'Complete only the supplied bounded writing task. Return the requested JSON and stop. No tools or external context are available.',
+			systemPrompt,
 			messages: [{ role: 'user', content: prompt, timestamp: Date.now() }],
 			tools: [],
 		},
@@ -194,6 +198,16 @@ try {
 				if (typeof init?.body === 'string') {
 					try {
 						const payload = JSON.parse(init.body) as Record<string, unknown>
+						metadata.messageRoles = (
+							Array.isArray(payload.messages)
+								? payload.messages
+								: Array.isArray(payload.input)
+									? payload.input
+									: []
+						).map((message: Record<string, unknown>) => message.role)
+						metadata.hasInstructions =
+							typeof payload.instructions === 'string' &&
+							payload.instructions.length > 0
 						metadata.wire = Object.fromEntries(
 							[
 								'model',

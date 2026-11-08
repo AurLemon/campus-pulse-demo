@@ -6,9 +6,16 @@ import type { Post, Comment, Activity } from '../../generated/prisma/client.ts'
 import type { Snapshot } from '@campus/contracts'
 import { db } from '../../packages/domain/prisma.ts'
 import { loadSnapshot } from '../../packages/domain/snapshot.ts'
-import { COMMUNITY_VOICE_POLICY } from '../../packages/domain/community-voice-policy.ts'
+import {
+	buildCommunityThreadRequest,
+	normalizeCommunityThreadDraft,
+} from '../../packages/domain/community-thread-prompt.ts'
 import { validateAgentText } from '../../packages/domain/agent-access.ts'
 import { runWritingBatch } from './budget.ts'
+import {
+	buildCommunityCopyReviewRequest,
+	assertCommunityCopyReview,
+} from '../../packages/domain/community-copy-review.ts'
 import {
 	ensureContentCache,
 	writeContentCacheFile,
@@ -28,6 +35,7 @@ interface Plan {
 	digest: string
 }
 interface Draft {
+	contextDigest?: string
 	postId: string
 	comments: { id: string; body: string }[]
 }
@@ -40,9 +48,9 @@ interface Approval {
 }
 interface Persona {
 	id: string
-	voice: string
+	name?: string
 	profileAsOf?: string
-	knowledgeEdges?: unknown
+	knowledgeEdges?: { familiarWith?: string[] }
 	writingHabits?: unknown
 }
 const arg = (k: string) =>
@@ -237,7 +245,12 @@ function validate(t: Thread, v: unknown): Draft {
 		throw Error('DRAFT_OBJECT_REQUIRED')
 	const r = v as Record<string, unknown>
 	if (
-		Object.keys(r).some((k) => !['postId', 'comments'].includes(k)) ||
+		Object.keys(r).some(
+			(k) => !['postId', 'comments', 'contextDigest'].includes(k),
+		) ||
+		(r.contextDigest !== undefined &&
+			(typeof r.contextDigest !== 'string' ||
+				!/^[a-f0-9]{64}$/.test(r.contextDigest))) ||
 		r.postId !== t.post.id ||
 		!Array.isArray(r.comments) ||
 		r.comments.length !== t.comments.length
@@ -256,7 +269,7 @@ function validate(t: Thread, v: unknown): Draft {
 			throw Error('COMMENT_SHAPE')
 		return {
 			id: c.id,
-			body: validateAgentText(c.body.replace(/。/g, '\n').trim(), 2000),
+			body: validateAgentText(c.body.trim(), 2000),
 		}
 	})
 	if (
@@ -264,7 +277,11 @@ function validate(t: Thread, v: unknown): Draft {
 		t.comments.some((c) => !comments.some((d) => d.id === c.id))
 	)
 		throw Error('COMMENT_ID_MISMATCH')
-	return { postId: t.post.id, comments }
+	return {
+		postId: t.post.id,
+		comments,
+		...(r.contextDigest ? { contextDigest: r.contextDigest as string } : {}),
+	}
 }
 const drafts = new Map<string, Draft>()
 const nativeDraftPath = arg('--native-draft')
@@ -359,85 +376,136 @@ if (generate) {
 		})
 	async function generateOne(t: Thread) {
 		await checkThread(t)
-		const path = join(directory, 'thread-' + t.digest + '.json')
-		let raw: unknown
-		try {
-			raw = await json(path)
-		} catch (e) {
-			if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e
-			const actors = new Set([
-					t.post.authorId,
-					...t.comments.map((c) => c.authorId),
-				]),
-				personas = [...actors].map((id) => {
-					const p = people.get(id)
-					return {
-						id,
-						voice: p?.voice?.slice(0, 180),
-						knowledgeEdges: p?.knowledgeEdges,
-						writingHabits: p?.writingHabits,
-					}
-				})
-			const prompt = JSON.stringify({
-				conversationPolicy: COMMUNITY_VOICE_POLICY,
-				task: '只重写给定Synthetic原评论，保留原帖完整标题正文、题材、已给活动事实和每条评论说话者/父链。旧评论具体句意、兴趣报幕、建议立场不是必须继承的事实，允许整串重新接话，评论可以跑题，但帖子不能换题，也不替帖子写新事件。不要为了继承原句把摄影/编程/运动等爱好硬套进无关话题。帖子本身已发布，原评论可以误会、只问自己、没答上、嘴硬、半句、表情、不同意或稍不耐烦，不必人人友善或解决问题，不按比例硬塞争吵。长回复有真实具体话要说才长，短不等于人人短，不让所有人提问/建议/总结。必须先读parentId对应父评论，楼主本人不反问自己。活动现有日期地点容量状态规则只可照输入，不编公告或新规定。图片仅原帖提及和既有事实可承接，不凭空猜图片。不改变帖子、不新增或删除评论，只输出postId/comments，comments每个{id,body}，完整且仅原ID。不要将政策、设定、来源说明写入正文。禁止中文句号，其他自然标点保留。',
-				post: t.post,
-				activity: t.activity,
-				comments: t.comments.map((c) => ({
-					...c,
-					speakerRole: c.authorId === t.post.authorId ? '楼主本人' : '评论者',
-					replyToAuthorId:
-						t.comments.find((p) => p.id === c.parentId)?.authorId ??
-						t.post.authorId,
+		const actors = new Set([
+			t.post.authorId,
+			...t.comments.map((comment) => comment.authorId),
+		])
+		const personas = [...actors].map((id) => ({
+			id,
+			name: people.get(id)?.name,
+			knowledgeEdges: people.get(id)?.knowledgeEdges,
+		}))
+		const threadInput = {
+			post: t.post,
+			comments: t.comments,
+			activity: t.activity,
+			participants: personas,
+			relationshipPairs: friendships
+				.filter(
+					(friendship) =>
+						actors.has(friendship.requesterId) &&
+						actors.has(friendship.recipientId) &&
+						friendship.createdAt <= t.post.createdAt,
+				)
+				.map((friendship) => ({
+					left: friendship.requesterId,
+					right: friendship.recipientId,
 				})),
-				participants: personas,
-				relationshipPairs: friendships
-					.filter(
-						(f) =>
-							actors.has(f.requesterId) &&
-							actors.has(f.recipientId) &&
-							f.createdAt <= t.post.createdAt,
-					)
-					.map((f) => ({
-						left: f.requesterId,
-						right: f.recipientId,
-						relation: 'friend',
-					})),
-			})
-			if (Buffer.byteLength(prompt) > 120000)
-				throw Error('PROMPT_TOO_LARGE', { cause: e })
-			const rawPath = join(directory, 'raw-' + t.digest + '.json')
-			let result: string
-			try {
-				result = (await json<{ text: string }>(rawPath)).text
-			} catch (rawError) {
-				if ((rawError as NodeJS.ErrnoException).code !== 'ENOENT')
-					throw rawError
-				result = await runWritingBatch(namespace + '-' + t.digest, prompt, {
+		}
+		const writingRequest = buildCommunityThreadRequest(threadInput)
+		const reviewSource = {
+			scene: JSON.parse(writingRequest.prompt),
+			structure: t.comments.map(({ id, authorId, parentId }) => ({
+				id,
+				authorId,
+				parentId,
+			})),
+			participants: personas,
+		}
+		const contextDigest = hash({
+			writingRequest,
+			reviewRequest: buildCommunityCopyReviewRequest(reviewSource, null),
+		})
+		const path = join(directory, 'thread-' + t.digest + '.json')
+		try {
+			const cached = validate(t, await json(path))
+			if (cached.contextDigest !== contextDigest)
+				throw Error('GENERATION_CONTEXT_CHANGED_USE_NEW_NAMESPACE:' + t.post.id)
+			drafts.set(t.post.id, cached)
+			return
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+		}
+		const rejectionPath = join(
+			directory,
+			'rejected-' + t.digest + '-' + contextDigest + '.json',
+		)
+		try {
+			await readFile(rejectionPath)
+			throw Error(
+				'DRAFT_PREVIOUSLY_REJECTED_USE_NEW_CONTEXT_OR_NAMESPACE:' + t.post.id,
+			)
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+		}
+		const rawPath = join(
+			directory,
+			'raw-' + t.digest + '-' + contextDigest + '.json',
+		)
+		let result: string
+		try {
+			result = (await json<{ text: string }>(rawPath)).text
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+			result = await runWritingBatch(
+				namespace + '-' + t.digest + '-' + contextDigest.slice(0, 24),
+				writingRequest.prompt,
+				{
 					api: 'openai-responses',
+					systemPrompt: writingRequest.systemPrompt,
 					maxTokens: 10000,
 					timeoutMs: 180000,
-				})
-				await writeContentCacheFile(
-					rawPath,
-					JSON.stringify({ text: result }) + '\n',
-					options,
-				)
-			}
-			raw = JSON.parse(
-				result
-					.trim()
-					.replace(/^```(?:json)?\s*/, '')
-					.replace(/\s*```$/, ''),
+				},
 			)
-			const draft = validate(t, raw)
+			await writeContentCacheFile(
+				rawPath,
+				JSON.stringify({ text: result }) + '\n',
+				options,
+			)
+		}
+		try {
+			const value: unknown = JSON.parse(
+				result.trim().replace(/^```(?:json)?\s*|\s*```$/g, ''),
+			)
+			const draft = {
+				...validate(t, normalizeCommunityThreadDraft(threadInput, value)),
+				contextDigest,
+			}
+			const reviewRequest = buildCommunityCopyReviewRequest(reviewSource, draft)
+			const reviewOutput = await runWritingBatch(
+				namespace + '-review-' + t.digest + '-' + contextDigest.slice(0, 24),
+				reviewRequest.prompt,
+				{
+					api: 'openai-responses',
+					systemPrompt: reviewRequest.systemPrompt,
+					maxTokens: 4096,
+					timeoutMs: 180000,
+				},
+			)
+			assertCommunityCopyReview(
+				JSON.parse(reviewOutput.replace(/^```(?:json)?\s*|\s*```$/g, '')),
+				draft.comments.map((comment) => comment.body).join('\n'),
+			)
 			await writeContentCacheFile(
 				path,
 				JSON.stringify(draft, null, 2) + '\n',
 				options,
 			)
+			drafts.set(t.post.id, draft)
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error)
+			if (
+				error instanceof SyntaxError ||
+				message.startsWith('INVALID_MODEL_RESULT:') ||
+				/^(DRAFT_|COMMENT_|AGENT_)/.test(message)
+			)
+				await writeContentCacheFile(
+					rejectionPath,
+					JSON.stringify({ contextDigest, error: message }) + '\n',
+					options,
+				)
+			throw error
 		}
-		drafts.set(t.post.id, validate(t, raw))
 		console.log(
 			JSON.stringify({
 				phase: 'draft-ready',
@@ -446,6 +514,7 @@ if (generate) {
 			}),
 		)
 	}
+
 	let next = 0
 	let stopped = false
 	const workers = await Promise.allSettled(

@@ -37,7 +37,10 @@ export function writingBatchId(jobId: string, retry: number) {
 	return `runtime-${jobId}${retry ? `-retry-${retry}` : ''}`
 }
 export function writingJobId(batchId: string) {
-	return batchId.startsWith('runtime-')
-		? batchId.slice('runtime-'.length).replace(/-retry-\d+$/, '')
+	const writingId = batchId.startsWith('review-runtime-')
+		? batchId.slice('review-'.length)
+		: batchId
+	return writingId.startsWith('runtime-')
+		? writingId.slice('runtime-'.length).replace(/-retry-\d+$/, '')
 		: null
 }

@@ -18,6 +18,7 @@ export interface SweepActivityContext {
 	postingOpportunity?: { mayPost: boolean }
 	privateContacts?: Array<{ targetId: string }>
 	friendRequests?: Array<{ id: string }>
+	books?: Array<{ allowedActions: string[] }>
 }
 interface WeightedAction {
 	action: AgentDecision['action']
@@ -81,6 +82,13 @@ export function sweepEngagementIntent(
 			weight: 3,
 			available: !!context.privateContacts?.length,
 		},
+		...(['borrow', 'return', 'reading', 'read'] as const).map((action) => ({
+			action,
+			weight: 3,
+			available: !!context.books?.some((book) =>
+				book.allowedActions.includes(action),
+			),
+		})),
 		{ action: 'skip', weight: 4, available: true },
 	]
 	const choices = options.filter((option) => option.available)

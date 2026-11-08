@@ -15,7 +15,7 @@ interface BookPage {
 function readFilters() {
 	return {
 		q: String(route.query.q ?? ''),
-		mode: String(route.query.mode ?? 'all'),
+		mode: String(route.query.mode ?? 'hybrid'),
 		tag: String(route.query.tag || '__all'),
 		academic: route.query.academic === '1',
 		crossDomain: route.query.crossDomain !== '0',

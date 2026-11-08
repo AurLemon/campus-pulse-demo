@@ -7,7 +7,7 @@ import { api, optionalActor, fail } from '../../utils/api'
 export default api(async (event) => {
 	const query = getQuery(event),
 		user = await optionalActor(event)
-	const mode = String(query.mode ?? 'all'),
+	const mode = String(query.mode ?? 'hybrid'),
 		search = String(query.q ?? '')
 			.trim()
 			.slice(0, 120),

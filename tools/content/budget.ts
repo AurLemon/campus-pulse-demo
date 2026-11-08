@@ -184,6 +184,7 @@ export async function runWritingBatch(
 	prompt: string,
 	options?: {
 		api?: string
+		systemPrompt?: string
 		maxTokens?: number
 		timeoutMs?: number
 		taskBudgetId?: string
@@ -195,7 +196,8 @@ export async function runWritingBatch(
 	)
 		throw new Error('AGENT_MODEL_PRICING_NOT_CONFIGURED')
 	if (
-		Buffer.byteLength(prompt, 'utf8') > 120000 ||
+		Buffer.byteLength(prompt + (options?.systemPrompt ?? ''), 'utf8') >
+			120000 ||
 		(options?.maxTokens ?? 16384) > 32768
 	)
 		throw new Error('BATCH_RESERVATION_INPUT_LIMIT')
@@ -230,7 +232,8 @@ export async function runWritingBatch(
 		}
 		const reserve = Math.max(
 			minimumReserve,
-			((Buffer.byteLength(prompt, 'utf8') * pricing.input +
+			((Buffer.byteLength(prompt + (options?.systemPrompt ?? ''), 'utf8') *
+				pricing.input +
 				(options?.maxTokens ?? 16384) * pricing.output) /
 				1e6) *
 				1.1,
@@ -262,6 +265,10 @@ export async function runWritingBatch(
 		)
 		await mkdir(job, { recursive: true, mode: 0o700 })
 		await writeFile(resolve(job, 'task.txt'), prompt, { mode: 0o600 })
+		if (options?.systemPrompt)
+			await writeFile(resolve(job, 'system.txt'), options.systemPrompt, {
+				mode: 0o600,
+			})
 		const entry: LedgerEntry = {
 			dispatcherPid: process.pid,
 			taskBudgetId,
@@ -289,6 +296,9 @@ export async function runWritingBatch(
 						...process.env,
 						CAMPUS_AGENT_MODEL: model,
 						CAMPUS_AGENT_CWD: entry.job,
+						CAMPUS_AGENT_SYSTEM_PROMPT_FILE: options?.systemPrompt
+							? resolve(entry.job, 'system.txt')
+							: '',
 						...(options?.api ? { CAMPUS_AGENT_API: options.api } : {}),
 						...(options?.maxTokens
 							? { CAMPUS_AGENT_MAX_TOKENS: String(options.maxTokens) }

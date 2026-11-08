@@ -47,7 +47,7 @@ export default defineEventHandler(async (event) => {
 	if (state.pauseReason === 'PI_USAGE_UNKNOWN') {
 		const failed = ledger.entries.findLast(
 			(entry) =>
-				entry.id.startsWith('runtime-') &&
+				writingJobId(entry.id) !== null &&
 				entry.error?.startsWith('PI_USAGE_UNKNOWN'),
 		)
 		state.pauseReason = (await originalFailure(failed)) ?? state.pauseReason

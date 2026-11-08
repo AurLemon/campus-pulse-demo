@@ -17,7 +17,11 @@ import {
 import { request } from './client.ts'
 import { syncPersonas } from './personas.ts'
 import { startAutomaticScheduling } from './startup.ts'
-import { buildAgentPrompt } from './prompt.ts'
+import { buildAgentRequest } from './prompt.ts'
+import {
+	buildCommunityCopyReviewRequest,
+	assertCommunityCopyReview,
+} from '../../packages/domain/community-copy-review.ts'
 import { MAX_JOB_RETRIES, writingBatchId } from './retry-policy.ts'
 import {
 	sweepEngagementIntent,
@@ -177,7 +181,7 @@ async function runJob(
 			modelBatchId: string | null
 			error: string | null
 		}
-		const prompt = buildAgentPrompt(
+		const writingRequest = buildAgentRequest(
 			actor,
 			{
 				...context,
@@ -185,6 +189,13 @@ async function runJob(
 					trigger.kind === 'sweep'
 						? sweepEngagementIntent(actor.actorId, id, context)
 						: undefined,
+				previousCopyReview: retry.error?.startsWith(
+					'INVALID_MODEL_RESULT:COPY_REVIEW_REJECTED:',
+				)
+					? retry.error.slice(
+							'INVALID_MODEL_RESULT:COPY_REVIEW_REJECTED:'.length,
+						)
+					: undefined,
 				previousFailure: retry.error
 					? (retry.error.match(/PRODUCT_\d+:([A-Z_]+)/)?.[1] ??
 						'PREVIOUS_ATTEMPT_FAILED')
@@ -201,15 +212,10 @@ async function runJob(
 				(!context.posts.length || context.replyOpportunity?.mayReply === false))
 		const output = noTarget
 			? JSON.stringify({ action: 'skip' })
-			: await runWritingBatch(batchId, prompt, {
-					maxTokens:
-						trigger.kind === 'direct-message'
-							? 768
-							: trigger.kind === 'comment'
-								? 1024
-								: trigger.kind === 'social'
-									? 512
-									: 2048,
+			: await runWritingBatch(batchId, writingRequest.prompt, {
+					api: 'openai-responses',
+					systemPrompt: writingRequest.systemPrompt,
+					maxTokens: 4096,
 					timeoutMs: 90000,
 				})
 		try {
@@ -219,6 +225,38 @@ async function runJob(
 		} catch {
 			throw new Error('INVALID_MODEL_RESULT:JSON_PARSE_FAILED')
 		}
+		if (['post', 'comment', 'message'].includes(decision.action)) {
+			const reviewRequest = buildCommunityCopyReviewRequest(
+				{
+					actorId: actor.actorId,
+					profileFacts: {
+						asOf: actor.profileAsOf,
+						lifeContext: actor.lifeContext,
+						routine: actor.routine,
+						ordinaryLifeFacts: actor.ordinaryLifeFacts,
+						recentEvents: actor.recentEvents,
+					},
+					context,
+					memories,
+				},
+				decision,
+			)
+			const reviewOutput = await runWritingBatch(
+				'review-' + batchId,
+				reviewRequest.prompt,
+				{
+					api: 'openai-responses',
+					systemPrompt: reviewRequest.systemPrompt,
+					maxTokens: 4096,
+					timeoutMs: 90000,
+				},
+			)
+			assertCommunityCopyReview(
+				JSON.parse(reviewOutput.replace(/^```(?:json)?\s*|\s*```$/g, '')),
+				[decision.title, decision.body].filter(Boolean).join('\n'),
+			)
+		}
+
 		store
 			.prepare(
 				'UPDATE jobs SET decision=?,action=?,status=?,readAcknowledgements=? WHERE id=?',
